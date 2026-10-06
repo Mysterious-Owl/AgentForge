@@ -4,9 +4,10 @@
   "weekly": {
     "w02_model_benchmark": {
       "set": "30 hand-labelled messages",
-      "measured": "nano 93.3% (p95 1185 ms), mini 90.0% (p95 4665 ms), qwen3:0.6b 66.7%; an earlier run tied mini and nano at 90.0%"
+      "measured": "four saved runs on the 30 rows: mini 86.7-93.3%, nano 86.7-93.3%, qwen3:0.6b 66.7-80.0%; mini/nano p95 2.2-4.4 s. The README's run (nano 93.3%, p95 1,185 ms) has no committed output"
     },
     "w05_groundedness": {
+      "set": "10 golden rows (8 answerable, 2 must-refuse)",
       "metrics": [
         "groundedness",
         "citation_precision",
@@ -14,29 +15,43 @@
         "false_answer_rate",
         "false_refusal_rate"
       ],
-      "gate": "refuse unless top-1 cosine >= 0.55 and spread >= 0.08"
+      "gate": "refuse unless top-1 cosine >= 0.55 and spread >= 0.08",
+      "measured": "groundedness 0.80, citation precision 1.00, citation recall 0.80, false-answer 0.00, false-refusal 0.20 (live run; identical to the W6 baseline column in a saved notebook run)"
     },
     "w06_before_after": {
       "set": "10 golden questions",
-      "gate": "W5 baseline vs full pipeline on the same rows; deterministic proxies, one row moves a rate by 0.10"
+      "gate": "W5 baseline vs full pipeline on the same rows; deterministic proxies, one row moves a rate by 0.10",
+      "measured": "baseline -> full: groundedness 0.80 -> 1.00, citation recall 0.80 -> 1.00, false-refusal 0.20 -> 0.00; citation precision 1.00 and false-answer 0.00 in both; the whole delta is rows #3 and #5",
+      "retrieval_lab": "baseline vs full retrieve(): p50 657 vs 10,910 ms, p95 952 vs 12,121 ms, tokens/query 450 vs 384 (recall@5 read 0.0 for both)"
     },
     "w07_breakrag": {
       "set": "70 adversarial cases (10 seeds x 7)",
-      "measured": "none on record - a pre-fix red run was withdrawn because the harness was broken"
+      "measured": "two saved post-fix 70-case runs, both RED (n-gram and embedding leakage skipped): run 1 seed 0.70, typo 0.55, jailbreak 1.00, multi_hop 0.60, conflict 0.90, hostile 0.70, alpha 0.365; run 2 seed 0.50, typo 0.55, jailbreak 1.00, multi_hop 0.40, conflict 0.90, hostile 0.80, alpha 0.225. No CI scorecard committed; an earlier pre-fix red run was withdrawn because the harness was broken"
     },
     "w08_lora": {
       "measured": "eval loss 2.27 -> 2.21 (best, epoch 2) -> 2.24 -> 2.30 (trainer_state.json); train loss 2.86 -> ~1.5; ~2.3M trainable params (0.38%)"
     },
+    "w08_benchmark": {
+      "set": "42-question eval_aiayn.jsonl; pass = an accepted string appears in the answer",
+      "measured": "tuned gemini-2.5-flash-lite 29/42 (69.0%); LoRA checkpoint-164 13/42 (31.0%); LoRA checkpoint-82 about 33% (live run, no saved output); no base-model run recorded",
+      "latency": "one question, wall time: local LoRA 19,260 ms vs tuned Gemini 2,456 ms"
+    },
     "w09_agent_scenarios": {
       "set": "5 scenarios",
-      "measured": "3/5 pass - the 2 failures are built in"
+      "gate": "built so 3/5 pass (2 failures by design: wrong remediation, unshipped escalate_to_human tool); no recorded run"
+    },
+    "w10_triageflow": {
+      "set": "no eval set",
+      "gate": "19 offline tests (routing, approval gate, handoff contracts, scoped memory, four-layer delete); no committed run"
     },
     "w11_tool_pick": {
       "set": "8 golden examples",
+      "measured": "good descriptions: 8/8 (accuracy 1.0) on gpt-5.4-nano-2026-03-17 (saved notebook output); no recorded run with vague descriptions",
       "gate": "accuracy compared for good vs vague tool descriptions"
     },
     "w12_guardian": {
       "set": "12 rows over 20 seeded chunks",
+      "measured": "accuracy 1.0 (12/12: answer 6/6, refuse 2/2, injection_refusal 2/2, acl_block 2/2), pii_leaks 0 on gpt-5.4-mini-2026-03-17",
       "gate": "accuracy per behaviour; pii_leaks must be 0"
     },
     "w14_deploy_gate": {
@@ -46,16 +61,18 @@
     },
     "w15_prompt_regression": {
       "set": "12 frozen cases",
-      "threshold": 0.8
+      "threshold": 0.8,
+      "measured": "classify@v3 12/12 (1.0) PASS; classify@v2 7/12 (0.583) FAIL; classify@v1 0/12 FAIL"
     },
     "w15_model_upgrade": {
       "set": "10 frozen cases",
       "tolerance": 0.02,
-      "gate": "exit non-zero on rollback-risk"
+      "gate": "exit non-zero on rollback-risk",
+      "measured": "gpt-5.4-mini-2026-03-17 10/10 vs gpt-5.6-luna 9/10, delta -0.1 -> rollback-risk"
     },
     "w16_costguard_routing": {
       "set": "10 cases",
-      "measured": "10/10 correct (floor 0.9); $0.004559 actual vs $0.010722 all-frontier; 57.5% saved (floor 40%), ~2.35x cheaper"
+      "measured": "10/10 correct (floor 0.9); $0.004559 routed vs $0.010722 all-frontier on a stub model (token counts from prompt length); 57.5% saved (floor 40%), ~2.35x cheaper"
     }
   },
   "portfolioagent_routing_gate": {

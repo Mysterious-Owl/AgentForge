@@ -156,8 +156,9 @@ in `.env` to run the cheap majority against a local OpenAI-compatible server (it
 function calling; set the two small price lines to 0); the frontier tier stays on the vendor.
 (`OPENAI_BASE_URL` moves **every** call - use it for a proxy, not for this.) A local model earns
 the slot by passing the **tool-choice gate** as nano does - `python eval_tools.py --live` with
-`SMALL_MODEL` pointed at it. Week 2 is the warning: on its golden set nano scored 93.3% and the
-local qwen3:0.6b 66.7%. The routing gate cannot tell you this - it never calls a model.
+`SMALL_MODEL` pointed at it. Week 2 is the warning: on its golden set, across four saved runs
+nano scored 86.7-93.3% and the local qwen3:0.6b 66.7-80.0%. The routing gate cannot tell you
+this - it never calls a model.
 
 ---
 
