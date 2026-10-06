@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Applied GenAI & Agentic AI Engineering Course Week 17 - PortfolioAgent</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#0d1117; --surface:#161b22; --surface-2:#21262d; --surface-3:#2d333b;
+      --border:#30363d; --text:#e6edf3; --text-muted:#7d8590; --blue:#58a6ff;
+      --blue-dim:#1f3a5f; --green:#3fb950; --green-dim:#1a3a28; --red:#f85149;
+      --red-dim:#3d1a1a; --orange:#d29922; --radius:8px;
+      --mono:'Fira Code','Cascadia Code','Consolas',monospace;
+    }
+    html, body { height:100%; }
+    body { background:var(--bg); color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      font-size:14px; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+    header { display:flex; align-items:center; justify-content:space-between;
+      padding:0 20px; height:52px; background:var(--surface);
+      border-bottom:1px solid var(--border); flex-shrink:0; }
+    .header-title { display:flex; align-items:center; gap:10px; font-size:15px; font-weight:600; }
+    .header-title .logo { width:28px; height:28px;
+      background:linear-gradient(135deg,#1a56db,#7e3af2); border-radius:6px;
+      display:flex; align-items:center; justify-content:center; font-size:15px; }
+    .week-badge { background:var(--blue-dim); color:var(--blue); font-size:11px;
+      font-weight:600; padding:2px 8px; border-radius:20px; border:1px solid #1f4080; }
+    .header-sub { color:var(--text-muted); font-weight:500; }
+    .header-actions { display:flex; align-items:center; gap:8px; }
+    button { cursor:pointer; border:none; border-radius:var(--radius); font-size:13px;
+      font-weight:500; transition:opacity .15s, transform .1s; display:inline-flex;
+      align-items:center; gap:6px; }
+    button:active { transform:scale(0.97); }
+    button:disabled { opacity:0.45; cursor:not-allowed; transform:none; }
+    .btn-ghost { background:transparent; color:var(--text-muted);
+      border:1px solid var(--border); padding:6px 12px; }
+    .btn-ghost:hover:not(:disabled){ background:var(--surface-2); color:var(--text); }
+    .btn-primary { background:#1a56db; color:#fff; padding:8px 16px; }
+    .btn-primary:hover:not(:disabled){ background:#1d4ed8; }
+    .btn-secondary { background:var(--surface-2); color:var(--text);
+      border:1px solid var(--border); padding:8px 16px; }
+    .btn-secondary:hover:not(:disabled){ background:var(--surface-3); }
+    #health-chip { display:flex; align-items:center; gap:6px; background:var(--surface-2);
+      border:1px solid var(--border); border-radius:20px; padding:5px 12px;
+      font-size:12px; font-weight:500; cursor:pointer; color:var(--text-muted); }
+    #health-chip:hover { background:var(--surface-3); }
+    #health-chip.online { color:var(--green); border-color:#1a4a2e; }
+    #health-chip.offline { color:var(--red); border-color:#4a1a1a; }
+    .dot { width:7px; height:7px; border-radius:50%; background:var(--text-muted); }
+    .online .dot { background:var(--green); box-shadow:0 0 6px #3fb95088; animation:pulse 2s infinite; }
+    .offline .dot { background:var(--red); }
+    @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.5;} }
+    main { display:grid; grid-template-columns:380px 1fr; flex:1; overflow:hidden; }
+    .left-panel { display:flex; flex-direction:column; border-right:1px solid var(--border); overflow-y:auto; }
+    .panel-section { padding:16px; border-bottom:1px solid var(--border); }
+    label { display:block; font-size:12px; font-weight:600; text-transform:uppercase;
+      letter-spacing:.05em; color:var(--text-muted); margin-bottom:8px; }
+    textarea { width:100%; background:var(--surface-2); border:1px solid var(--border);
+      border-radius:var(--radius); color:var(--text); font-size:13px; font-family:inherit;
+      outline:none; transition:border-color .15s; resize:none; padding:10px 12px; line-height:1.6; min-height:120px; }
+    textarea:focus { border-color:var(--blue); box-shadow:0 0 0 3px #1a56db22; }
+    .owner-input { width:100%; background:var(--surface-2); border:1px solid var(--border);
+      border-radius:var(--radius); color:var(--text); font-size:13px; font-family:inherit;
+      outline:none; padding:8px 12px; }
+    .owner-input:focus { border-color:var(--blue); box-shadow:0 0 0 3px #1a56db22; }
+    .input-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+    .action-btns { display:flex; flex-direction:column; gap:8px; padding:16px; }
+    .action-btns button { width:100%; justify-content:center; }
+    .scenario-pills { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+    .pill { background:var(--surface-3); color:var(--text-muted); border:1px solid var(--border);
+      border-radius:20px; padding:3px 10px; font-size:11px; cursor:pointer; transition:all .15s; }
+    .pill:hover { background:var(--blue-dim); color:var(--blue); border-color:#1f4080; }
+    .char-count { margin-top:6px; font-size:11px; color:var(--text-muted); font-variant-numeric:tabular-nums; }
+    .right-panel { display:flex; flex-direction:column; overflow:hidden; }
+    .pane { display:flex; flex-direction:column; overflow:hidden; }
+    .pane-output { flex:1; border-bottom:1px solid var(--border); }
+    .pane-logs { height:200px; flex-shrink:0; }
+    .pane-header { display:flex; align-items:center; justify-content:space-between;
+      padding:8px 16px; background:var(--surface); border-bottom:1px solid var(--border);
+      font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.05em;
+      color:var(--text-muted); flex-shrink:0; }
+    .pane-body { flex:1; overflow-y:auto; padding:16px; font-size:13px; line-height:1.6; }
+    .placeholder-msg { color:var(--text-muted); font-style:italic; }
+    .log-entry { display:flex; gap:10px; padding:2px 0; font-size:12px; line-height:1.5; }
+    .log-ts { color:var(--text-muted); flex-shrink:0; }
+    .log-level { font-weight:700; flex-shrink:0; width:50px; }
+    .log-info .log-level{color:var(--blue);} .log-success .log-level{color:var(--green);}
+    .log-warn .log-level{color:var(--orange);} .log-error .log-level{color:var(--red);}
+    .spinner { display:none; width:14px; height:14px; border:2px solid var(--border);
+      border-top-color:var(--blue); border-radius:50%; animation:spin .6s linear infinite; }
+    .spinner.active { display:inline-block; }
+    @keyframes spin { to { transform:rotate(360deg);} }
+    .error-box { background:var(--red-dim); border:1px solid #6b2020; border-radius:var(--radius);
+      padding:12px; color:var(--red); font-family:var(--mono); font-size:12px; white-space:pre-wrap; }
+    /* Answer card, badges, tier/cost meta, and result panels */
+    .answer-card { background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--radius); padding:16px; margin-bottom:12px; }
+    .answer-text { font-size:13.5px; line-height:1.75; white-space:pre-wrap; }
+    .answer-meta { display:flex; gap:12px; align-items:center; flex-wrap:wrap; font-size:11px;
+      color:var(--text-muted); margin-top:12px; padding-top:10px; border-top:1px solid var(--border); }
+    .badge { display:inline-flex; align-items:center; gap:4px; padding:2px 9px; border-radius:20px;
+      font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
+    .badge-grounded { background:var(--green-dim); color:var(--green); border:1px solid #1a4a2e; }
+    .badge-ungrounded { background:var(--red-dim); color:var(--red); border:1px solid #6b2020; }
+    .card-json { background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
+      padding:12px; font-family:var(--mono); font-size:12px; white-space:pre-wrap; color:#a5d6ff; }
+    .badge-pending { background:#3a2e12; color:var(--orange); border:1px solid #5a4a1a; }
+    .badge-neutral { background:var(--blue-dim); color:var(--blue); border:1px solid #1f4080; }
+    .badge-tier { background:var(--surface-3); color:var(--text); border:1px solid var(--border); }
+    .btn-row { display:flex; gap:8px; }
+    .btn-row button { flex:1; justify-content:center; }
+    .gate-actions { display:flex; gap:8px; margin-top:12px; }
+    .kv { color:var(--text-muted); } .kv b { color:var(--text); font-weight:600; }
+    /* Build cards - what was built, week by week (GET /portfolio, parsed from data/AGENTS.md) */
+    .builds-intro { font-size:13.5px; line-height:1.7; color:var(--text); }
+    .builds-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:10px; }
+    .build-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+      padding:12px 14px; cursor:pointer; transition:border-color .15s, background .15s; outline:none; }
+    .build-card:hover, .build-card:focus-visible { border-color:#1f4080; background:#161f2b; }
+    .build-card.open { grid-column:1 / -1; border-color:var(--blue); cursor:default; }
+    .build-head { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+    .build-week { background:var(--blue-dim); color:var(--blue); border:1px solid #1f4080;
+      border-radius:6px; font-size:11px; font-weight:700; padding:1px 7px; flex-shrink:0; }
+    .build-name { font-weight:600; font-size:13.5px; }
+    .build-text { color:var(--text-muted); font-size:12.5px; line-height:1.6; display:-webkit-box;
+      -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+    .build-text::first-letter { text-transform:uppercase; }
+    .build-card.open .build-text { color:var(--text); -webkit-line-clamp:unset; display:block; }
+    /* The agent's trace and its verified citations, under every answer */
+    .trace { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:10px;
+      font-size:11.5px; color:var(--text-muted); }
+    .trace-step { font-family:var(--mono); background:var(--surface-2); border:1px solid var(--border);
+      border-radius:6px; padding:1px 7px; color:var(--text); }
+    .trace-step.failed { color:var(--red); border-color:#6b2020; }
+    .cite { background:var(--green-dim); color:var(--green); border:1px solid #1a4a2e;
+      border-radius:6px; padding:1px 7px; font-size:11px; }
+    .cite.bad { background:var(--red-dim); color:var(--red); border-color:#6b2020; }
+    .cite, .cite-inline { cursor:pointer; }
+    .cite-inline { background:var(--green-dim); color:var(--green); border:1px solid #1a4a2e;
+      border-radius:5px; padding:0 5px; font-size:11.5px; white-space:nowrap; }
+    .cite-inline.bad { background:var(--red-dim); color:var(--red); border-color:#6b2020; cursor:help; }
+    /* What the agent retrieved: one expandable block per tool call */
+    .ctx-list { margin-top:12px; padding-top:10px; border-top:1px solid var(--border); }
+    .ctx-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em;
+      color:var(--text-muted); margin-bottom:6px; }
+    .ctx { background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
+      margin-bottom:6px; }
+    .ctx.flash { border-color:var(--green); box-shadow:0 0 0 2px #3fb95033; }
+    .ctx summary { cursor:pointer; padding:6px 10px; font-size:12px; display:flex; gap:8px;
+      align-items:center; flex-wrap:wrap; }
+    .ctx summary .src { color:var(--text-muted); }
+    .ctx summary .used { color:var(--green); font-size:11px; }
+    .ctx summary .unused { color:var(--text-muted); font-size:11px; }
+    .ctx summary .err { color:var(--red); font-size:11px; }
+    .ctx-body { margin:0; padding:8px 12px 10px; border-top:1px solid var(--border);
+      font-family:var(--mono); font-size:11.5px; line-height:1.55; white-space:pre-wrap;
+      color:var(--text); max-height:260px; overflow:auto; }
+    .history-row { display:flex; align-items:center; justify-content:space-between; margin-top:8px;
+      font-size:11px; color:var(--text-muted); }
+    .gate-chip { background:var(--surface-2); border:1px solid var(--border); border-radius:20px;
+      padding:2px 10px; font-size:11px; color:var(--text); }
+    .build-read { display:inline-flex; align-items:center; border-radius:var(--radius);
+      font-size:13px; font-weight:500; text-decoration:none; }
+    .build-more { display:none; margin-top:10px; gap:8px; }
+    .build-card.open .build-more { display:flex; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-title">
+    <div class="logo">🤖</div>
+    Applied GenAI &amp; Agentic AI Engineering Course
+    <span class="week-badge">Week 17</span>
+    <span class="header-sub">- PortfolioAgent</span>
+  </div>
+  <div class="header-actions">
+    <button class="btn-ghost" onclick="showBuilds()">🗂 My builds</button>
+    <button class="btn-ghost" onclick="window.open('/readme','_blank')">📖 README</button>
+    <div id="health-chip" onclick="checkHealth()" title="Click to re-check">
+      <span class="dot"></span><span id="health-text">Checking…</span>
+    </div>
+  </div>
+</header>
+<main>
+  <div class="left-panel">
+    <div class="panel-section">
+      <div class="input-row">
+        <label style="margin:0">Ask about my capstone</label>
+        <button class="btn-ghost" style="padding:4px 10px;font-size:11px" onclick="fillExample(0)">↺ Example</button>
+      </div>
+      <textarea id="question" oninput="updateCharCount()" placeholder="Ask about the capstone - e.g. what did you build in Week 4?"></textarea>
+      <div class="scenario-pills">
+        <span class="pill" onclick="fillExample(0)">Week 4 build</span>
+        <span class="pill" onclick="fillExample(1)">Week 2 results</span>
+        <span class="pill" onclick="fillExample(2)">Why nano?</span>
+        <span class="pill" onclick="fillExample(3)">Compare W5 vs W6</span>
+        <span class="pill" onclick="fillExample(4)">Contact the student</span>
+        <span class="pill" onclick="fillExample(5)">Off-topic (test)</span>
+        <span class="pill" onclick="fillOversized()">Oversized input (413)</span>
+      </div>
+      <div id="char-count" class="char-count">0 characters</div>
+      <div class="history-row"><span id="history-note">New conversation</span>
+        <button class="btn-ghost" style="padding:2px 8px;font-size:11px" onclick="newChat()">✕ New chat</button></div>
+    </div>
+    <div class="panel-section">
+      <label>A2A - discover, then call</label>
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="fetchCard()">🪪 Fetch Agent Card</button>
+        <button class="btn-secondary" onclick="askA2A()">🤝 Ask over A2A</button>
+      </div>
+    </div>
+    <div class="action-btns">
+      <button class="btn-primary" id="btn-ask" onclick="doAsk()">
+        <span id="spin-a" class="spinner"></span>💬 &nbsp;Ask
+      </button>
+    </div>
+    <div class="panel-section">
+      <label>Memory + approvals</label>
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="viewAudit()">🧾 My audit log</button>
+        <button class="btn-secondary" onclick="viewInbox()">📥 Intro requests</button>
+      </div>
+    </div>
+    <div class="panel-section" id="owner-section" hidden>
+      <label for="owner-token">Owner - admin token</label>
+      <input class="owner-input" id="owner-token" type="password" autocomplete="off"
+             placeholder="Needed to decide intro requests and read the logs" oninput="saveOwnerToken()">
+      <div class="char-count">Kept in this tab only (sessionStorage) and sent as a bearer token.</div>
+    </div>
+  </div>
+  <div class="right-panel">
+    <div class="pane pane-output">
+      <div class="pane-header">Output
+        <button class="btn-ghost" style="padding:3px 10px;font-size:11px" onclick="clearOutput()">✕ Clear</button>
+      </div>
+      <div class="pane-body" id="output-body">
+        <span class="placeholder-msg">Ask a question or fetch the Agent Card to see output here…</span>
+      </div>
+    </div>
+    <div class="pane pane-logs">
+      <div class="pane-header">Logs
+        <button class="btn-ghost" style="padding:3px 10px;font-size:11px" onclick="clearLogs()">✕ Clear</button>
+      </div>
+      <div class="pane-body" id="logs-body"><span class="placeholder-msg">Request logs will appear here…</span></div>
+    </div>
+  </div>
+</main>
+<script>
+  // RECORDING SETUP - this line must stay pointed at :8100 while filming.
+  // The mock server runs on :8100; the real app runs on :8000 and serves this page.
+  // The browser shows a clean http://localhost:8000 while every button calls the mock,
+  // so the numbers on screen are identical across takes. Nothing reveals :8100.
+  // SHOOT-ONLY - after the shoot, swap the two lines below: uncomment the origin line and
+  // delete the :8100 line, so the deployed page calls the server that served it.
+  const API = window.location.origin;
+  // const API = 'http://localhost:8100';   // SHOOT-ONLY
+  const DEMO_USER = 'demo-user';   // scopes /ask + /audit for the memory demo
+  const EXAMPLES = [
+    'What did you build in Week 4?',
+    'What were the results of the Week 2 model benchmark?',
+    'Why does the small tier run on nano instead of a local model?',
+    'Compare what Week 5 and Week 6 built.',
+    "I'm hiring an AI engineer at Acme - please ask the student to contact me at jane@example.com.",
+    'What is the capital of France?'
+  ];
+  // Short history: the last 3 turns, kept in THIS tab (sessionStorage) and sent with each
+  // question so a follow-up ("why did you choose that?") works. The server stores none of it.
+  const HISTORY_KEY = 'portfolioagent-history', HISTORY_TURNS = 3, HISTORY_CHARS = 2000;
+  function loadHistory(){ try { return JSON.parse(sessionStorage.getItem(HISTORY_KEY)) || []; }
+    catch(e){ return []; } }
+  function saveHistory(h){ try { sessionStorage.setItem(HISTORY_KEY, JSON.stringify(h)); } catch(e){} }
+  let HISTORY = loadHistory();
+  function rememberTurn(question, answer){
+    HISTORY = [...HISTORY, {question: question.slice(0, HISTORY_CHARS),
+                            answer: answer.slice(0, HISTORY_CHARS)}].slice(-HISTORY_TURNS);
+    saveHistory(HISTORY); showHistory();
+  }
+  function showHistory(){
+    document.getElementById('history-note').textContent = HISTORY.length
+      ? `Follow-ups use the last ${HISTORY.length} turn${HISTORY.length===1?'':'s'} (kept in this tab)`
+      : 'New conversation';
+  }
+  function newChat(){ HISTORY = []; saveHistory(HISTORY); showHistory(); addLog('info','New chat - history cleared'); }
+  function fmtAnswer(s){
+    return escHtml(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+)`/g,'<code>$1</code>');
+  }
+  function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+  function updateCharCount(){
+    const n = document.getElementById('question').value.length;
+    document.getElementById('char-count').textContent = n.toLocaleString('en-US') + ' characters';
+  }
+  function fillExample(i){ document.getElementById('question').value = EXAMPLES[i];
+    updateCharCount(); addLog('info','Example loaded: '+EXAMPLES[i]); }
+  // Failure D - the cost ceiling. A deliberately enormous input trying to bypass the
+  // token budget. The server prices it BEFORE calling the model and refuses with a 413.
+  function fillOversized(){
+    const q = 'Describe your architecture. '.repeat(45000);   // 28 x 45,000 = 1,260,000 characters
+    document.getElementById('question').value = q;
+    updateCharCount();
+    addLog('warn','Oversized input loaded: '+q.length.toLocaleString('en-US')+
+      ' characters - this should trip the $0.05 cost ceiling (413).');
+  }
+  async function checkHealth(){
+    const chip=document.getElementById('health-chip'), txt=document.getElementById('health-text');
+    chip.className=''; txt.textContent='Checking…';
+    try { const r=await fetch(`${API}/health`); const d=await r.json();
+      const tiers=`${d.small_model} / ${d.frontier_model}`;
+      chip.className='online'; txt.textContent=`Online · ${d.small_model}`;
+      document.getElementById('owner-section').hidden = !d.admin_token_required;
+      document.getElementById('owner-token').value = ownerToken();
+      addLog('success',`Health OK - tiers: ${tiers}`);
+    } catch(e){ chip.className='offline'; txt.textContent='Offline';
+      addLog('error',`Health check failed - is the server running? (${e.message})`); }
+  }
+  function clearOutput(){ document.getElementById('output-body').innerHTML =
+    '<span class="placeholder-msg">Ask a question or fetch the Agent Card to see output here…</span>'; }
+  function clearLogs(){ document.getElementById('logs-body').innerHTML =
+    '<span class="placeholder-msg">Request logs will appear here…</span>'; }
+  function addLog(level,msg){
+    const body=document.getElementById('logs-body'); const ph=body.querySelector('.placeholder-msg');
+    if(ph) ph.remove();
+    const now=new Date().toLocaleTimeString('en-GB',{hour12:false});
+    const div=document.createElement('div'); div.className=`log-entry log-${level}`;
+    div.innerHTML=`<span class="log-ts">${now}</span><span class="log-level">${level.toUpperCase()}</span><span class="log-msg">${escHtml(msg)}</span>`;
+    body.appendChild(div); body.scrollTop=body.scrollHeight;
+  }
+  function setLoading(a){ document.querySelectorAll('.action-btns button').forEach(b=>b.disabled=a);
+    document.querySelectorAll('.spinner').forEach(s=>s.classList.toggle('active',a)); }
+  async function doAsk(){
+    const q=document.getElementById('question').value.trim();
+    if(!q){ addLog('warn','Question is empty.'); return; }
+    clearOutput(); setLoading(true);
+    addLog('info',`POST /ask - ${q.length>120 ? q.slice(0,120)+`… (${q.length.toLocaleString('en-US')} chars)` : q}`);
+    try {
+      const r=await fetch(`${API}/ask`,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({question:q, history:HISTORY, user_id:DEMO_USER, session_id:'web'})});
+      const d=await r.json();
+      if(!r.ok){ throw new Error(`${r.status} - ${formatDetail(d.detail, r.statusText)}`); }
+      renderAnswer(d);
+      if(d.answer) rememberTurn(q, d.answer);
+      addLog('success',`Done - ${d.tier} tier · ${d.model_calls} model call(s) · `+
+        `${traceText(d.tools_called)||'no tool'} · $${(d.cost_usd??0).toFixed(6)}`);
+    } catch(e){ document.getElementById('output-body').innerHTML=`<div class="error-box">${escHtml(e.message)}</div>`;
+      addLog('error',e.message);
+    } finally { setLoading(false); }
+  }
+  // FastAPI details arrive three shapes: a 422 validation array, a structured object
+  // (the cost ceiling / iteration cap), or a plain string (503 / 502).
+  function formatDetail(detail, fallback){
+    if(Array.isArray(detail)) return detail.map(x=>x.msg).join(' | ');
+    if(detail && typeof detail === 'object'){
+      if(detail.error === 'cost_ceiling_exceeded')
+        return `cost_ceiling_exceeded: projected $${detail.projected_usd} exceeds the `+
+               `$${detail.ceiling_usd} per-request ceiling - refused before any spend.`;
+      if(detail.error === 'iteration_cap_exceeded')
+        return `iteration_cap_exceeded: the bounded loop stopped at `+
+               `${detail.max_iterations} iterations.`;
+      return JSON.stringify(detail);
+    }
+    return detail || fallback;
+  }
+  // "get_build(4) → get_eval_results(4)" - the tools the MODEL chose, in order. An intro
+  // request shows only its reason: the visitor's contact details stay off the trace.
+  function argLabel(s){
+    return s.tool === 'request_intro' ? (s.args||{}).reason || ''
+                                      : Object.values(s.args||{}).join(', ');
+  }
+  function traceText(steps){
+    return (steps||[]).map(s => `${s.tool}(${argLabel(s)})`).join(' → ');
+  }
+  function renderTrace(d){
+    const steps = (d.tools_called||[]).map(s =>
+      `<span class="trace-step${s.success?'':' failed'}" title="${escHtml(s.error||s.source||'')}">`+
+      `${escHtml(s.tool)}(${escHtml(argLabel(s))})</span>`).join(' → ');
+    const cites = (d.citations||[]).map((c, i) =>
+        `<span class="cite" data-cite="${i}">✓ ${escHtml(c)}</span>`).join('')
+      + (d.unverified_citations||[]).map(c =>
+          `<span class="cite bad" title="no tool returned this source">✕ ${escHtml(c)}</span>`).join('');
+    return `<div class="trace">🛠 ${steps ? 'Called '+steps : 'No tool called'}`+
+      ` · ${d.model_calls} model call${d.model_calls===1?'':'s'}</div>`+
+      (cites ? `<div class="trace">📎 Sources ${cites}</div>` : '') + renderContext(d);
+  }
+  // The retrieved context: what each tool call pulled - the text the model answered from.
+  function renderContext(d){
+    const steps = (d.tools_called||[]).filter(s => s.tool !== 'request_intro');
+    if(!steps.length) return '';
+    const cited = new Set(d.citations||[]);
+    const blocks = steps.map((s, i) => {
+      const head = `<b>${escHtml(s.tool)}(${escHtml(argLabel(s))})</b>`;
+      if(!s.success) return `<details class="ctx"><summary>${head}`+
+        `<span class="err">✕ ${escHtml(s.error||'failed')}</span></summary></details>`;
+      const used = cited.has(s.source)
+        ? '<span class="used">✓ cited in the answer</span>'
+        : '<span class="unused">retrieved, not cited</span>';
+      return `<details class="ctx" data-ctx="${i}"><summary>${head}`+
+        `<span class="src">→ ${escHtml(s.source||'')}</span>${used}</summary>`+
+        `<pre class="ctx-body">${escHtml(s.content||'')}</pre></details>`;
+    }).join('');
+    return `<div class="ctx-list"><div class="ctx-title">📚 Retrieved context `+
+      `(${steps.length} tool call${steps.length===1?'':'s'} - click to read what it pulled)</div>${blocks}</div>`;
+  }
+  // [AGENTS.md · W4] in the answer becomes a chip: green if a tool returned it, red if invented.
+  function fmtCited(text, d){
+    const ok = new Set(d.citations||[]), bad = new Set(d.unverified_citations||[]);
+    return fmtAnswer(text).replace(/\[([^\[\]\n<>]{1,80})\](?!\()/g, (m, tag) => {
+      const raw = tag.replace(/&amp;/g,'&').replace(/\s+/g,' ').trim();
+      if(ok.has(raw)) return `<span class="cite-inline" data-cite-src="${[...ok].indexOf(raw)}">${tag}</span>`;
+      if(bad.has(raw)) return `<span class="cite-inline bad" title="no tool returned this source">✕ ${tag}</span>`;
+      return m;
+    });
+  }
+  // A citation chip opens the excerpt it points at - the evidence, one click away.
+  function bindCitations(d){
+    const steps = (d.tools_called||[]).filter(s => s.tool !== 'request_intro');
+    const open = src => {
+      const i = steps.findIndex(s => s.success && s.source === src);
+      const el = document.querySelector(`#output-body [data-ctx="${i}"]`);
+      if(!el) return;
+      el.open = true; el.classList.add('flash'); el.scrollIntoView({block:'nearest'});
+      setTimeout(() => el.classList.remove('flash'), 1200);
+    };
+    const cites = d.citations || [];
+    document.querySelectorAll('#output-body [data-cite]').forEach(c =>
+      c.addEventListener('click', () => open(cites[+c.dataset.cite])));
+    document.querySelectorAll('#output-body [data-cite-src]').forEach(c =>
+      c.addEventListener('click', () => open(cites[+c.dataset.citeSrc])));
+  }
+  function renderAnswer(d){
+    const badge = d.pending_action
+      ? '<span class="badge badge-pending">⏸ awaiting the student</span>'
+      : d.grounded
+      ? '<span class="badge badge-grounded">✓ grounded · cited</span>'
+      : /^OUT_OF_SCOPE/.test(d.answer||'')
+      ? '<span class="badge badge-ungrounded">✕ out of scope</span>'
+      : '<span class="badge badge-ungrounded">✕ not grounded</span>';
+    // The badge already conveys out-of-scope - don't show the raw sentinel token.
+    // The model may return the bare sentinel with no follow-up sentence; never render an
+    // empty card - fall back to the refusal the system prompt asks for.
+    const text = d.answer.replace(/^OUT_OF_SCOPE\s*/, '').trim()
+      || 'I can only answer questions about this capstone.';
+    document.getElementById('output-body').innerHTML = `
+      <div class="answer-card">
+        <div class="answer-text">${fmtCited(text, d)}</div>
+        <div class="answer-meta">
+          ${badge}
+          <span class="badge badge-tier">${escHtml(d.tier||'-')} tier${d.routed_up?' · routed up':''}</span>
+          <span>🧠 ${escHtml(d.model)}</span>
+          <span>💵 $${(d.cost_usd??0).toFixed(6)}${d.saved_usd>0?` · saved $${d.saved_usd.toFixed(6)}`:''}</span>
+          <span>🎯 skill: ${escHtml(d.skill_matched||'-')}</span>
+        </div>
+        ${renderTrace(d)}
+      </div>
+      <div id="gate-slot"></div>`;
+    bindCitations(d);
+    if(d.pending_action) renderAction(d.pending_action, document.getElementById('gate-slot'));
+  }
+  async function fetchCard(){
+    setLoading(true); addLog('info','GET /.well-known/agent-card.json');
+    try {
+      const r=await fetch(`${API}/.well-known/agent-card.json`); const d=await r.json();
+      document.getElementById('output-body').innerHTML =
+        `<div class="answer-card"><div class="answer-meta" style="margin:0 0 10px;padding:0;border:none">`+
+        `<span class="badge badge-grounded">A2A Agent Card</span></div>`+
+        `<div class="card-json">${escHtml(JSON.stringify(d,null,2))}</div></div>`;
+      addLog('success',`Agent Card - ${d.name} · ${d.skills.length} skill(s)`);
+    } catch(e){ document.getElementById('output-body').innerHTML=`<div class="error-box">${escHtml(e.message)}</div>`;
+      addLog('error',e.message);
+    } finally { setLoading(false); }
+  }
+  // What another agent would do: read the card, find the interface, send JSON-RPC SendMessage.
+  async function askA2A(){
+    setLoading(true);
+    const q = 'Tell me about your AgentForge';
+    try {
+      const card = await (await fetch(`${API}/.well-known/agent-card.json`)).json();
+      const path = new URL(card.supportedInterfaces[0].url).pathname;   // discovered, not hard-coded
+      addLog('info',`POST ${path} - JSON-RPC SendMessage: "${q}"`);
+      const r = await fetch(`${API}${path}`, {method:'POST',
+        headers:{'Content-Type':'application/json','A2A-Version':'1.0'},
+        body:JSON.stringify({jsonrpc:'2.0', id:1, method:'SendMessage', params:{message:{
+          messageId:'ui-'+Date.now(), role:'ROLE_USER', parts:[{text:q}]}}})});
+      const d = await r.json();
+      if(d.error) throw new Error(`JSON-RPC ${d.error.code} - ${d.error.message}`);
+      const m = d.result.message, md = m.metadata || {};
+      document.getElementById('output-body').innerHTML =
+        `<div class="answer-card"><div class="answer-meta" style="margin:0 0 10px;padding:0;border:none">`+
+        `<span class="badge badge-grounded">A2A · ${escHtml(m.role)}</span>`+
+        `<span class="kv">tier: <b>${escHtml(md.tier)}</b></span>`+
+        `<span class="kv">💵 $${(md.costUsd??0).toFixed(6)}</span></div>`+
+        `<div class="answer-text">${fmtAnswer(m.parts[0].text)}</div>`+
+        `<div class="trace">🛠 ${escHtml(traceText(md.toolsCalled)||'No tool called')}</div>`+
+        `<div class="card-json" style="margin-top:10px">${escHtml(JSON.stringify(d,null,2))}</div></div>`;
+      addLog('success',`A2A reply - ${m.role} · ${md.tier} tier · $${(md.costUsd??0).toFixed(6)}`);
+    } catch(e){ showError(e); } finally { setLoading(false); }
+  }
+  // ── Build cards: the page opens on what was built, so a visitor can just scroll ──
+  let BUILDS = null;
+  async function showBuilds(){
+    addLog('info','GET /portfolio');
+    try {
+      if(!BUILDS){ const r = await fetch(`${API}/portfolio`); const d = await r.json();
+        if(!r.ok) throw new Error(`${r.status} - ${formatDetail(d.detail, r.statusText)}`);
+        BUILDS = d; }
+      renderBuilds(BUILDS);
+      addLog('success',`Portfolio - ${BUILDS.builds.length} builds · click a card for the details`);
+    } catch(e){ showError(e); }
+  }
+  function renderBuilds(d){
+    const cards = d.builds.map((b,i)=>`
+      <div class="build-card" tabindex="0" data-build="${i}">
+        <div class="build-head"><span class="build-week">W${b.week}</span>
+          <span class="build-name">${escHtml(b.name)}</span></div>
+        <div class="build-text">${fmtAnswer(b.summary)}</div>
+        <div class="build-more"><button class="btn-secondary" data-ask="${i}">💬 Ask about this build</button>
+          <a class="btn-secondary build-read" href="/portfolio/${+b.week}" target="_blank"
+             rel="noopener">📖 Read in a new tab - results, diagrams</a></div>
+      </div>`).join('');
+    document.getElementById('output-body').innerHTML =
+      `<div class="answer-card"><div class="answer-meta" style="margin:0 0 10px;padding:0;border:none">`+
+      `<span class="badge badge-neutral">${escHtml(d.title||'Portfolio')} · what I built</span>`+
+      `<span class="kv">${d.builds.length} weekly builds · click a card for the details</span>`+
+      gateChips(d.gates) + `</div>`+
+      `<div class="builds-intro">${fmtAnswer(d.overview)}</div></div>`+
+      `<div class="builds-grid">${cards}</div>`;
+    // Bound in code, like the gate buttons: no build text ever passes through an attribute.
+    document.querySelectorAll('#output-body .build-card').forEach(c => {
+      const toggle = () => c.classList.toggle('open');
+      c.addEventListener('click', e => { if(!e.target.closest('button,a')) toggle(); });
+      c.addEventListener('keydown', e => { if(e.key==='Enter' && e.target===c) toggle(); });
+    });
+    document.querySelectorAll('#output-body [data-ask]').forEach(btn =>
+      btn.addEventListener('click', () => askAboutBuild(d.builds[+btn.dataset.ask])));
+  }
+  function gateChips(g){
+    if(!g) return '';
+    const chip = (label, x) => `<span class="gate-chip">${label}: ${x && x.score!=null
+      ? `<b>${x.passed!=null?x.passed+'/'+x.cases:x.cases+' Qs'}</b> · ${x.score}` : 'not run yet'}</span>`;
+    return chip('Routing gate', g.routing) + chip('Tool-choice gate', g.tool_choice);
+  }
+  // Fills the question only - nothing is sent (and nothing is spent) until Ask is clicked.
+  function askAboutBuild(b){
+    document.getElementById('question').value = `What did you build in Week ${b.week} (${b.name})?`;
+    updateCharCount(); document.getElementById('question').focus();
+    addLog('info',`Question loaded for W${b.week} ${b.name} - click Ask`);
+  }
+  // ── Tool layer ─────────────────────────────────────────────────────────────
+  // ── Owner token: only a deployment that sets ADMIN_TOKEN asks for it ──────────
+  const OWNER_KEY = 'portfolioagent-owner-token';
+  function ownerToken(){ try { return sessionStorage.getItem(OWNER_KEY) || ''; } catch(e){ return ''; } }
+  function saveOwnerToken(){
+    try { sessionStorage.setItem(OWNER_KEY, document.getElementById('owner-token').value.trim()); }
+    catch(e){ /* storage blocked - the token lives only in the field */ }
+  }
+  function ownerHeaders(){
+    const t = ownerToken() || document.getElementById('owner-token').value.trim();
+    return t ? {'Authorization': `Bearer ${t}`} : {};
+  }
+  function ownerOnly(r){
+    return r.status === 401 ? 'Owner only - enter this deployment\'s admin token below. '
+      + 'Visitors can ask for an intro and watch it pause; only the owner decides.' : null;
+  }
+  async function postJSON(path, body, extra={}){
+    const r = await fetch(`${API}${path}`, {method:'POST',
+      headers:{'Content-Type':'application/json', ...extra}, body:JSON.stringify(body)});
+    const d = await r.json().catch(()=>({}));
+    return {r, d};
+  }
+  function showError(e){
+    document.getElementById('output-body').innerHTML =
+      `<div class="error-box">${escHtml(e.message)}</div>`;
+    addLog('error', e.message);
+  }
+  // ── Approval gate: an intro request the agent created, waiting for the student ──
+  function renderAction(d, slot){
+    const target = slot || document.getElementById('output-body');
+    const map = {'input-required':'badge-pending','executed':'badge-grounded','rejected':'badge-ungrounded'};
+    const badge = `<span class="badge ${map[d.status]||'badge-neutral'}">${escHtml(d.status)}</span>`;
+    const gate = d.status==='input-required'
+      ? `<div class="gate-actions">
+           <button class="btn-primary" data-decide="approve">✓ Approve</button>
+           <button class="btn-secondary" data-decide="reject">✕ Reject</button>
+         </div>` : '';
+    target.innerHTML =
+      `<div class="answer-card">
+         <div class="answer-meta" style="margin:0 0 10px;padding:0;border:none">${badge}
+           <span class="kv">request_intro · id: <b>${escHtml(d.id)}</b></span></div>
+         <div class="answer-text"><b>${escHtml(d.name)}</b>${d.company?' · '+escHtml(d.company):''} · ${escHtml(d.reason)}
+${escHtml(d.message)}</div>
+         ${d.result?`<div class="kv" style="margin-top:8px">${escHtml(d.result)}</div>`:''}
+         ${gate}
+       </div>`;
+    // Bind the gate buttons in code: the action id never passes through an HTML attribute.
+    target.querySelectorAll('[data-decide]').forEach(b =>
+      b.addEventListener('click', () => decideAction(d.id, b.dataset.decide === 'approve')));
+  }
+  async function decideAction(id, approve){
+    setLoading(true); addLog('info',`POST /approve - ${id} approve=${approve}`);
+    try {
+      const {r,d} = await postJSON('/approve', {action_id:id, approve, approver:'owner'},
+                                   ownerHeaders());
+      if(r.status === 409){ throw new Error(`409 - this action was already ${d.detail.status}`
+                                             + ' - a decision is made once'); }
+      if(!r.ok) throw new Error(ownerOnly(r) || `${r.status} - ${formatDetail(d.detail, r.statusText)}`);
+      renderAction(d);
+      addLog(approve?'success':'warn',`Action ${id} - ${d.status}${d.result?' · '+d.result:''}`);
+    } catch(e){ showError(e); } finally { setLoading(false); }
+  }
+  // ── Memory ─────────────────────────────────────────────────────────────────
+  async function viewAudit(){
+    setLoading(true); addLog('info',`GET /audit/${DEMO_USER}`);
+    try {
+      const r = await fetch(`${API}/audit/${DEMO_USER}`, {headers: ownerHeaders()});
+      const d = await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(ownerOnly(r) || `${r.status} - ${formatDetail(d.detail, r.statusText)}`);
+      const rows = d.length ? d.map(e=>`${e.kind}  ·  ${e.detail}`).join('\n')
+        : '(empty - ask a question first)';
+      document.getElementById('output-body').innerHTML =
+        `<div class="answer-card"><div class="answer-meta" style="margin:0 0 10px;padding:0;border:none">`+
+        `<span class="badge badge-neutral">audit log · ${escHtml(DEMO_USER)}</span>`+
+        `<span class="kv">${d.length} entr${d.length===1?'y':'ies'}</span></div>`+
+        `<div class="card-json">${escHtml(rows)}</div></div>`;
+      addLog('success',`Audit log - ${d.length} entr${d.length===1?'y':'ies'} for ${DEMO_USER}`);
+    } catch(e){ showError(e); } finally { setLoading(false); }
+  }
+  async function viewInbox(){
+    setLoading(true); addLog('info','GET /actions');
+    try {
+      const r = await fetch(`${API}/actions`, {headers: ownerHeaders()});
+      const d = await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(ownerOnly(r) || `${r.status} - ${formatDetail(d.detail, r.statusText)}`);
+      const body = document.getElementById('output-body');
+      body.innerHTML = `<div class="answer-card"><div class="answer-meta" style="margin:0;padding:0;border:none">`+
+        `<span class="badge badge-neutral">intro requests</span><span class="kv">${d.length} waiting for a decision</span>`+
+        `</div></div>` + d.map((_, i) => `<div id="inbox-${i}"></div>`).join('');
+      d.forEach((a, i) => renderAction(a, document.getElementById(`inbox-${i}`)));
+      addLog('success', `Inbox - ${d.length} request(s) waiting`);
+    } catch(e){ showError(e); } finally { setLoading(false); }
+  }
+  checkHealth();
+  showHistory();
+  showBuilds();
+</script>
+</body>
+</html>

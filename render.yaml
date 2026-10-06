@@ -1,0 +1,23 @@
+# Render Blueprint - in the Render dashboard: New > Blueprint > pick this repo. Every push
+# to the default branch redeploys. Render prompts once for OPENAI_API_KEY (sync: false).
+services:
+  - type: web
+    name: portfolioagent
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # ONE worker on purpose: the gate, memory and guard counters live in this process.
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false             # paste it in the dashboard - never commit it
+      - key: ADMIN_TOKEN
+        generateValue: true     # random; read it in the dashboard to approve actions
+      - key: TRUST_FORWARDED_FOR
+        value: "true"           # behind Render's proxy - rate-limit the real client
+      - key: DAILY_BUDGET_USD
+        value: "1.00"
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "30"

@@ -1,0 +1,88 @@
+{
+  "_readme": "AgentForge eval results. 'measured' = a recorded run in that week's package; 'gate' = the check and its floor, with no committed run. The portfolioagent_routing_gate section is written by eval_run.py; everything else is curated from the weekly packages.",
+  "capstone": "AgentForge (course reference capstone)",
+  "weekly": {
+    "w02_model_benchmark": {
+      "set": "30 hand-labelled messages",
+      "measured": "nano 93.3% (p95 1185 ms), mini 90.0% (p95 4665 ms), qwen3:0.6b 66.7%; an earlier run tied mini and nano at 90.0%"
+    },
+    "w05_groundedness": {
+      "metrics": [
+        "groundedness",
+        "citation_precision",
+        "citation_recall",
+        "false_answer_rate",
+        "false_refusal_rate"
+      ],
+      "gate": "refuse unless top-1 cosine >= 0.55 and spread >= 0.08"
+    },
+    "w06_before_after": {
+      "set": "10 golden questions",
+      "gate": "W5 baseline vs full pipeline on the same rows; deterministic proxies, one row moves a rate by 0.10"
+    },
+    "w07_breakrag": {
+      "set": "70 adversarial cases (10 seeds x 7)",
+      "measured": "none on record - a pre-fix red run was withdrawn because the harness was broken"
+    },
+    "w08_lora": {
+      "measured": "eval loss 2.27 -> 2.21 (best, epoch 2) -> 2.24 -> 2.30 (trainer_state.json); train loss 2.86 -> ~1.5; ~2.3M trainable params (0.38%)"
+    },
+    "w09_agent_scenarios": {
+      "set": "5 scenarios",
+      "measured": "3/5 pass - the 2 failures are built in"
+    },
+    "w11_tool_pick": {
+      "set": "8 golden examples",
+      "gate": "accuracy compared for good vs vague tool descriptions"
+    },
+    "w12_guardian": {
+      "set": "12 rows over 20 seeded chunks",
+      "gate": "accuracy per behaviour; pii_leaks must be 0"
+    },
+    "w14_deploy_gate": {
+      "set": "5 cases",
+      "threshold": 0.8,
+      "measured": "answer-v4 1.00 (5/5); answer-v3 0.00 - deploy blocked"
+    },
+    "w15_prompt_regression": {
+      "set": "12 frozen cases",
+      "threshold": 0.8
+    },
+    "w15_model_upgrade": {
+      "set": "10 frozen cases",
+      "tolerance": 0.02,
+      "gate": "exit non-zero on rollback-risk"
+    },
+    "w16_costguard_routing": {
+      "set": "10 cases",
+      "measured": "10/10 correct (floor 0.9); $0.004559 actual vs $0.010722 all-frontier; 57.5% saved (floor 40%), ~2.35x cheaper"
+    }
+  },
+  "portfolioagent_routing_gate": {
+    "SAMPLE_DATA": true,
+    "_readme": "Produced by eval_run.py over data/eval_golden.jsonl: 27 frozen questions about the capstone, labelled with the tier a human expects. Prompt tokens are the first call's input (system prompt, tool schemas, question); replace the golden set with your own before you quote these.",
+    "suite": "portfolioagent_routing_v1",
+    "cases": 27,
+    "passed": 26,
+    "overall_score": 0.963,
+    "metrics": {
+      "routing_accuracy": 0.963,
+      "by_tier": {
+        "small": 19,
+        "frontier": 8
+      }
+    },
+    "cost": {
+      "avg_usd_per_request": 0.000734,
+      "routed_total_usd": 0.019813,
+      "all_frontier_total_usd": 0.039077,
+      "savings_ratio_x": 1.97,
+      "ceiling_usd_per_request": 0.05,
+      "_note": "ceiling_usd_per_request is the one number here that is real and enforced: app/budget.py rejects any request whose projected cost exceeds it (413), and GET /health reports it. savings_ratio_x is the all-frontier bill divided by the routed-mix bill on the same tokens."
+    },
+    "tests": {
+      "unit_and_contract": "run `pytest -q`",
+      "_note": "The eval gate below fails CI if overall_score drops under the floor."
+    }
+  }
+}

@@ -1,0 +1,5 @@
+# The standalone repo stores every text file with LF line endings; git converts on checkout.
+* text=auto eol=lf
+# Binary files are never touched - the tokenizer vocabulary is SHA-256-checked by tiktoken.
+*.png binary
+data/tiktoken/* binary

@@ -1,0 +1,21 @@
+# --- The app and its tests run on these alone (the tests need no key, no network, no GPU) ---
+# Pinned to the versions the package is tested on - the same stack as Week 16's CostGuard.
+fastapi==0.136.3
+starlette==1.2.1           # fastapi only asks for starlette>=0.46.0 - pinned so a clean install matches
+uvicorn[standard]==0.49.0
+pydantic==2.13.4
+pydantic-settings==2.14.1
+python-dotenv==1.2.1       # pydantic-settings reads .env with it
+openai==2.14.0
+tenacity==9.0.0            # retries on transient network errors (the SDK's own retries are off)
+tiktoken==0.8.0            # the cost ceiling counts input tokens with the model's tokenizer
+markdown==3.7              # renders GET /readme
+httpx==0.28.1              # the SDK's HTTP client, and what FastAPI's TestClient drives
+anyio==4.12.0              # pulled in by starlette and httpx - newer ones make TestClient warn
+
+# --- Tests ---
+pytest==8.3.3
+pytest-asyncio==0.24.0     # pytest.ini sets its loop scope; unset, it warns on every run
+
+# --- week17_notebook.ipynb drives the API over HTTP ---
+requests==2.34.2
