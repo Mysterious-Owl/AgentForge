@@ -12,7 +12,7 @@ only reasoning-heavy or mutating requests escalate. Pricing lives here too, so
 from __future__ import annotations
 from functools import lru_cache
 
-from pydantic import AliasChoices, Field, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -100,6 +100,12 @@ class Settings(BaseSettings):
     eval_results_path: str = "data/eval_results.json"
 
     log_level: str = "INFO"
+
+    @field_validator("agent_base_url")
+    @classmethod
+    def _no_trailing_slash(cls, url: str) -> str:
+        """`https://x.onrender.com/` must not advertise `https://x.onrender.com//a2a`."""
+        return url.strip().rstrip("/")
 
     @model_validator(mode="after")
     def check_deploy_guards(self) -> "Settings":

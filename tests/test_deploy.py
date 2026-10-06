@@ -156,6 +156,10 @@ def test_render_url_becomes_the_card_interface(monkeypatch):
     _settings(monkeypatch, AGENT_BASE_URL="https://me.example.com")   # explicit setting wins
     card = client.get("/.well-known/agent-card.json").json()
     assert card["supportedInterfaces"][0]["url"] == "https://me.example.com/a2a"
+    _settings(monkeypatch, AGENT_BASE_URL="https://me.example.com/ ")  # a trailing slash is dropped
+    card = client.get("/.well-known/agent-card.json").json()
+    assert card["supportedInterfaces"][0]["url"] == "https://me.example.com/a2a"
+    assert card["documentationUrl"] == "https://me.example.com/readme"
 
 
 # ---------- Rate limit and daily budget ----------
