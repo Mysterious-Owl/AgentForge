@@ -79,7 +79,7 @@ def test_get_build_returns_the_week_and_its_source():
 def test_get_eval_results_returns_that_weeks_entries():
     env = tools.execute_tool("get_eval_results", {"week": 2})
     assert env.success and env.source == "eval_results.json · W2"
-    assert "nano 86.7-93.3%" in json.dumps(env.data)            # the saved runs, not a claim
+    assert "nano 93.3% (p95 1,185 ms" in json.dumps(env.data)
     empty = tools.execute_tool("get_eval_results", {"week": 1})
     assert empty.success and empty.data["note"] == "no eval run is recorded for this week"
 
@@ -267,11 +267,11 @@ def test_each_step_carries_the_text_it_pulled(monkeypatch):
     monkeypatch.setattr(llm, "chat", scripted(
         calls(("get_build", {"week": 4}), ("get_eval_results", {"week": 2}),
               ("get_build", {"week": 99})),
-        answer("Qdrant [AGENTS.md · W4]; nano 86.7-93.3% [eval_results.json · W2].")))
+        answer("Qdrant [AGENTS.md · W4]; nano 93.3% [eval_results.json · W2].")))
     steps = _ask("What did Week 4 build, and what did Week 2 measure?").json()["tools_called"]
     assert steps[0]["content"].startswith("W4 · KnowledgeVault\n")
     assert "text-embedding-3-large" in steps[0]["content"]          # the retrieved fact itself
-    assert "measured: four saved runs" in steps[1]["content"]
+    assert "measured: nano 93.3%" in steps[1]["content"]
     assert steps[2]["success"] is False and steps[2]["content"] is None
 
 

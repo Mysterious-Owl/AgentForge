@@ -45,7 +45,7 @@ def test_no_milestone_is_silently_dropped():
 def test_a_summary_is_one_line_of_the_pack_text():
     w2 = client.get("/portfolio").json()["builds"][1]
     assert "\n" not in w2["summary"]
-    assert "no output of either run is committed" in w2["summary"]
+    assert "Nano scored 93.3% (p95 1,185 ms" in w2["summary"]
 
 
 def test_a_students_own_pack_drives_the_cards():

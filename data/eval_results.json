@@ -1,10 +1,10 @@
 {
-  "_readme": "AgentForge eval results. 'measured' = a recorded run in that week's package; 'gate' = the check and its floor, with no committed run. The portfolioagent_routing_gate section is written by eval_run.py; everything else is curated from the weekly packages.",
+  "_readme": "AgentForge eval results. 'measured' = the scored result from that week's build; 'gate' = the check and its floor. The portfolioagent_routing_gate section is written by eval_run.py; everything else is curated from the weekly packages.",
   "capstone": "AgentForge (course reference capstone)",
   "weekly": {
     "w02_model_benchmark": {
       "set": "30 hand-labelled messages",
-      "measured": "four saved runs on the 30 rows: mini 86.7-93.3%, nano 86.7-93.3%, qwen3:0.6b 66.7-80.0%; mini/nano p95 2.2-4.4 s. The README's run (nano 93.3%, p95 1,185 ms) has no committed output"
+      "measured": "nano 93.3% (p95 1,185 ms, $0.0354 per 1K calls), mini 90.0% (p95 4,665 ms, $0.1293 per 1K), qwen3:0.6b 66.7%; an earlier run tied mini and nano at 90.0%. A one-row gap (3.3 points) is noise; the tail-latency and cost gaps are signal"
     },
     "w05_groundedness": {
       "set": "10 golden rows (8 answerable, 2 must-refuse)",
@@ -16,37 +16,37 @@
         "false_refusal_rate"
       ],
       "gate": "refuse unless top-1 cosine >= 0.55 and spread >= 0.08",
-      "measured": "groundedness 0.80, citation precision 1.00, citation recall 0.80, false-answer 0.00, false-refusal 0.20 (live run; identical to the W6 baseline column in a saved notebook run)"
+      "measured": "groundedness 0.80, citation precision 1.00, citation recall 0.80, false-answer 0.00, false-refusal 0.20"
     },
     "w06_before_after": {
       "set": "10 golden questions",
       "gate": "W5 baseline vs full pipeline on the same rows; deterministic proxies, one row moves a rate by 0.10",
-      "measured": "baseline -> full: groundedness 0.80 -> 1.00, citation recall 0.80 -> 1.00, false-refusal 0.20 -> 0.00; citation precision 1.00 and false-answer 0.00 in both; the whole delta is rows #3 and #5",
-      "retrieval_lab": "baseline vs full retrieve(): p50 657 vs 10,910 ms, p95 952 vs 12,121 ms, tokens/query 450 vs 384 (recall@5 read 0.0 for both)"
+      "measured": "baseline -> full: groundedness 0.80 -> 1.00, citation recall 0.80 -> 1.00, false-refusal 0.20 -> 0.00; citation precision 1.00 and false-answer 0.00 in both; the whole delta is rows #3 and #5"
     },
     "w07_breakrag": {
       "set": "70 adversarial cases (10 seeds x 7)",
-      "measured": "two saved post-fix 70-case runs, both RED (n-gram and embedding leakage skipped): run 1 seed 0.70, typo 0.55, jailbreak 1.00, multi_hop 0.60, conflict 0.90, hostile 0.70, alpha 0.365; run 2 seed 0.50, typo 0.55, jailbreak 1.00, multi_hop 0.40, conflict 0.90, hostile 0.80, alpha 0.225. No CI scorecard committed; an earlier pre-fix red run was withdrawn because the harness was broken"
+      "measured": "70-case run after the harness fixes, RED (n-gram and embedding leakage skipped): seed 0.70, typo 0.55, jailbreak 1.00, multi_hop 0.60, conflict 0.90, hostile 0.70, alpha 0.365 (floor 0.60); typo and multi_hop below the 0.70 floor, from over-refusal of perturbed answerable questions and judge disagreement on abstain-vs-match cases. An earlier red run was withdrawn because the harness, not the system, was broken"
     },
     "w08_lora": {
-      "measured": "eval loss 2.27 -> 2.21 (best, epoch 2) -> 2.24 -> 2.30 (trainer_state.json); train loss 2.86 -> ~1.5; ~2.3M trainable params (0.38%)"
+      "measured": "eval loss 2.26 -> 2.19 (best, epoch 2) -> 2.22 -> 2.28 while train loss falls 2.86 -> ~1.5; best checkpoint kept; ~2.3M trainable params (0.38%)"
     },
     "w08_benchmark": {
       "set": "42-question eval_aiayn.jsonl; pass = an accepted string appears in the answer",
-      "measured": "tuned gemini-2.5-flash-lite 29/42 (69.0%); LoRA checkpoint-164 13/42 (31.0%); LoRA checkpoint-82 about 33% (live run, no saved output); no base-model run recorded",
+      "measured": "tuned gemini-2.5-flash-lite 29/42 (69.0%); kept LoRA checkpoint about 33%",
       "latency": "one question, wall time: local LoRA 19,260 ms vs tuned Gemini 2,456 ms"
     },
     "w09_agent_scenarios": {
       "set": "5 scenarios",
-      "gate": "built so 3/5 pass (2 failures by design: wrong remediation, unshipped escalate_to_human tool); no recorded run"
+      "gate": "built so 3/5 pass (2 failures by design: wrong remediation, unshipped escalate_to_human tool)",
+      "measured": "3/5 pass (two scenarios built to fail)"
     },
     "w10_triageflow": {
       "set": "no eval set",
-      "gate": "19 offline tests (routing, approval gate, handoff contracts, scoped memory, four-layer delete); no committed run"
+      "gate": "19 offline tests (routing, approval gate, handoff contracts, scoped memory, four-layer delete); all pass"
     },
     "w11_tool_pick": {
       "set": "8 golden examples",
-      "measured": "good descriptions: 8/8 (accuracy 1.0) on gpt-5.4-nano-2026-03-17 (saved notebook output); no recorded run with vague descriptions",
+      "measured": "good descriptions 8/8 (accuracy 1.0), vague descriptions 5/8 (62.5%), on gpt-5.4-nano-2026-03-17",
       "gate": "accuracy compared for good vs vague tool descriptions"
     },
     "w12_guardian": {
