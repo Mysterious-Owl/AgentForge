@@ -17,7 +17,7 @@ import html
 import json
 import re
 
-from app.context import ContextPackError, _pack_dir
+from app.context import ContextPackError, _pack_dir, read_pack_file, read_pack_json
 
 _SECTION = re.compile(r"^## Build history.*?$(.*?)(?=^## |\Z)", re.M | re.S)
 _ENTRY = re.compile(r"^\*\*W(\d+) · (.+?)\*\*\s*(?:\([^)]*\))?\s*-\s*(.*)$", re.S)
@@ -29,10 +29,7 @@ _WEEK_TAG = re.compile(r"\bW(\d+)(?:-W?(\d+))?\b")
 
 
 def _read(name: str) -> str:
-    path = _pack_dir() / name
-    if not path.exists():
-        raise ContextPackError(f"missing context-pack file: {name}")
-    return path.read_text(encoding="utf-8")
+    return read_pack_file(name)
 
 
 def parse_portfolio(text: str) -> dict:
@@ -110,7 +107,7 @@ def profile() -> dict:
     if not path.exists():
         return {}
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(read_pack_file("profile.json"))
     except json.JSONDecodeError as exc:
         raise ContextPackError(f"profile.json is not valid JSON: {exc}") from exc
     if not isinstance(data, dict):
@@ -151,12 +148,12 @@ def week_details(week: int) -> str | None:
 
 def week_results(week: int) -> list[dict]:
     """That week's eval entries from eval_results.json (see `_results`)."""
-    return _results(json.loads(_read("eval_results.json")), week)
+    return _results(read_pack_json("eval_results.json"), week)
 
 
 def gates() -> dict:
     """The two gates the site shows: routing (offline, every run) and tool choice (live)."""
-    evals = json.loads(_read("eval_results.json"))
+    evals = read_pack_json("eval_results.json")
     out = {}
     for key, label in (("portfolioagent_routing_gate", "routing"),
                        ("portfolioagent_tool_gate", "tool_choice")):
@@ -168,10 +165,12 @@ def gates() -> dict:
 
 
 def pass_rate(gate: dict) -> str:
-    """'27/27 (100%)' - passed of cases, then the score as a percentage."""
+    """'27/27 (100%)' - passed of cases, then the score as a percentage; 'not run yet'
+    for a gate with no score (the same words the page uses)."""
     score = gate.get("overall_score")
-    pct = f"{round(score * 100, 1):g}%" if isinstance(score, (int, float)) else "n/a"
-    return f"{gate.get('passed')}/{gate.get('cases')} ({pct})"
+    if not isinstance(score, (int, float)):
+        return "not run yet"
+    return f"{gate.get('passed')}/{gate.get('cases')} ({round(score * 100, 1):g}%)"
 
 
 def _results(evals: dict, week: int) -> list[dict]:
@@ -204,7 +203,7 @@ def build_detail(week: int) -> dict | None:
     if build is None:
         return None
     arch = _read("architecture.md")
-    evals = json.loads(_read("eval_results.json"))
+    evals = read_pack_json("eval_results.json")
     section = _DECISIONS.search(arch)
     decisions = [" ".join(d.split()) for d in
                  re.split(r"^\d+\. ", section.group(1) if section else "", flags=re.M)[1:]]

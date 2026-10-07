@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from app import config
 from app.main import app
-from app.portfolio import parse_portfolio, weeks_in
+from app.portfolio import parse_portfolio, pass_rate, weeks_in
 
 client = TestClient(app)
 ROOT = Path(__file__).resolve().parent.parent
@@ -106,3 +106,13 @@ def test_read_page_escapes_the_pack(tmp_path, monkeypatch):
     page = client.get("/portfolio/1").text
     assert "<script>alert" not in page and "<img" not in page
     assert "&lt;script&gt;" in page
+
+
+@pytest.mark.parametrize("gate,text", [
+    ({"passed": 27, "cases": 27, "overall_score": 1.0}, "27/27 (100%)"),
+    ({"passed": 26, "cases": 27, "overall_score": 0.963}, "26/27 (96.3%)"),
+    ({"passed": 10, "cases": 14, "overall_score": 0.714}, "10/14 (71.4%)"),
+    ({"passed": None, "cases": None, "overall_score": None}, "not run yet"),
+])
+def test_a_gate_reads_as_passed_of_cases_and_a_percentage(gate, text):
+    assert pass_rate(gate) == text

@@ -3,6 +3,8 @@
 The model is scripted at `app.llm.chat` (tests/scripted.py), so routing, the agent loop, the
 approval gate, memory and the caps are all exercised offline in a few seconds.
 """
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -13,6 +15,7 @@ from app.scrub import CARD_REDACTION, PHONE_REDACTION
 from tests.scripted import answer, calls, grounded_model, scripted
 
 client = TestClient(app)
+ROOT = Path(__file__).resolve().parent.parent
 
 SMALL = "gpt-5.4-nano-2026-03-17"
 FRONTIER = "gpt-5.4-mini-2026-03-17"
@@ -143,7 +146,8 @@ def test_iteration_cap_returns_429(monkeypatch):
 def test_get_context_does_not_cache(tmp_path, monkeypatch):
     from app import context
     for name in context.PACK_FILES:
-        (tmp_path / name).write_text("sample", encoding="utf-8")
+        (tmp_path / name).write_text('{"sample": 1}' if name.endswith(".json") else "sample",
+                                     encoding="utf-8")
     monkeypatch.setattr(context, "get_settings",
                         lambda: config.Settings(openai_api_key="test-key",
                                                 data_dir=str(tmp_path)))
@@ -151,6 +155,21 @@ def test_get_context_does_not_cache(tmp_path, monkeypatch):
     (tmp_path / context.PACK_FILES[0]).unlink()
     with pytest.raises(ContextPackError):
         get_context()
+
+
+@pytest.mark.parametrize("body", ["{not json", "[1, 2]", bytes([0xFF, 0xFE]) + b" bad utf-8"])
+def test_a_corrupt_eval_results_file_is_a_503_not_a_500(tmp_path, monkeypatch, body):
+    import shutil
+    for name in ("AGENTS.md", "architecture.md"):
+        shutil.copy(ROOT / "data" / name, tmp_path / name)
+    target = tmp_path / "eval_results.json"
+    target.write_bytes(body if isinstance(body, bytes) else body.encode())
+    _settings(monkeypatch, DATA_DIR=str(tmp_path))
+    monkeypatch.setattr(llm, "chat", lambda *a, **k: pytest.fail("no call with a broken pack"))
+    assert client.get("/portfolio").status_code == 503
+    assert client.get("/portfolio/5").status_code == 503
+    r = client.post("/ask", json={"question": "What did you build in Week 4?"})
+    assert r.status_code == 503 and "context pack not loaded" in r.json()["detail"]
 
 
 def test_missing_pack_is_a_503_before_any_model_call(tmp_path, monkeypatch):

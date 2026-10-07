@@ -93,6 +93,21 @@ def test_the_tool_gate_scorer():
     off = next(r for r in eval_tools.load_rows() if r["expect"] == "out_of_scope")
     assert eval_tools.score_row(off, _resp(answer="OUT_OF_SCOPE no.")) == []
     assert eval_tools.score_row(off, _resp(answer="Paris.")) == ["no OUT_OF_SCOPE sentinel"]
+    typo = {**off, "expect": "refused"}                    # a golden-set typo fails loudly
+    assert eval_tools.score_row(typo, _resp(answer="OUT_OF_SCOPE no."))[0].startswith(
+        "unknown expect 'refused'")
+
+
+def test_a_row_that_errors_after_spending_still_counts_in_the_cost(capsys):
+    """A model that keeps calling tools hits the iteration cap - the row fails, and the eight
+    calls it made are still on the run's bill."""
+    from tests.scripted import calls, scripted
+    from app.budget import cost_of
+    row = eval_tools.load_rows()[0]
+    out = eval_tools.run([row], scripted(calls("get_build", week=4)))
+    assert out["passed"] == 0 and out["rows"][0]["fails"][0].startswith("error:")
+    small = get_settings().small_model
+    assert out["cost_usd"] == pytest.approx(8 * cost_of(900, 30, small), abs=1e-6)
 
 
 def test_the_tool_gate_refuses_to_spend_without_live(capsys):

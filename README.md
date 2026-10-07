@@ -76,7 +76,8 @@ signature, that the agent they reached is yours. Your name, headline and links h
 │   ├── test_public_url.py   <- what a stranger on the shared URL can do: size limits, who the rate limit counts, strict A2A versions, an honest audit trail
 │   ├── test_admin_profile.py <- the signed card (verifies; a changed or hostile card or another key fails), the profile (http links only)
 │   ├── test_portfolio.py    <- the build cards and read pages: every week of the pack, no package ids, a student's own pack, 404/503, escaped
-│   ├── test_pages.py        <- the pages are served, the README renders, and the page-safety properties of index.html and admin.html
+│   ├── test_pages.py        <- the pages are served, the README renders, the page-safety greps - and the pages' own script run on hostile text
+│   ├── page_harness.js      <- runs a page's script in Node against a fake DOM for test_pages.py (skipped without Node.js)
 │   └── test_pack.py         <- the pack: the worst-case loop fits the ceiling, golden-set drift, saved results, the tool gate's rows and scorer
 ├── index.html           <- browser UI for visitors (served at GET /)
 ├── admin.html           <- the owner's page (served at GET /admin): token, intro inbox, audit log
@@ -128,13 +129,14 @@ the written summary **plus text versions of the architecture diagrams** - and
 > its threshold, and the result **only where a run was recorded**.
 > `portfolioagent_routing_gate` is written by `python eval_run.py` (offline, free).
 > `portfolioagent_tool_gate` is written by `python eval_tools.py --live`, which calls the real
-> model - until you run it, the site says "not run yet". The one number enforced at runtime is
+> model. The shipped pack carries the reference run (14/14); delete that key - or never run the
+> gate on your own pack - and the site says "not run yet". The one number enforced at runtime is
 > the $0.05 per-request ceiling - `app/budget.py` refuses any call that would push a request
 > over it (413), and `GET /health` reports it.
 
 It does **not** send real emails (an approved intro is simulated) or keep state across a
 restart - see
-[Deliberate simplifications](#10-deliberate-simplifications---read-this-before-you-copy-it-into-production).
+[Deliberate simplifications](#10-deliberate-simplifications-read-before-production).
 
 ---
 
@@ -142,7 +144,7 @@ restart - see
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+source .venv/bin/activate          # Windows: .venv\Scripts\activate (cmd), .venv\Scripts\Activate.ps1 (PowerShell), source .venv/Scripts/activate (Git Bash)
 pip install -r requirements.txt
 cp .env.example .env               # Windows: copy .env.example .env - then paste your OPENAI_API_KEY
 uvicorn app.main:app --reload --reload-dir app --port 8000
@@ -215,7 +217,7 @@ request and it waits for you on `/admin`, which only you can use:
    inbox** with no token - it answers "Owner only", which is all a stranger gets.
 
 The inbox lives in memory: a restart (or a Render free-tier sleep) empties it - see
-[Deliberate simplifications](#10-deliberate-simplifications---read-this-before-you-copy-it-into-production).
+[Deliberate simplifications](#10-deliberate-simplifications-read-before-production).
 
 **Step 3 - your pack.** Replace the files in `data/` with your own capstone's - see
 [What goes in the pack](#5-what-goes-in-the-pack).
@@ -368,8 +370,11 @@ Merges only its own section into `eval_results.json`; `--refresh-tokens` re-coun
 Replays `data/eval_tools_golden.jsonl` through the exact `/ask` path against the real model,
 and scores each row: the expected tool was called with the expected arguments, the answer is
 grounded and cites the expected source - or, for the off-topic and injection rows, no tool was
-called and nothing leaked; for the intro row, the request is paused at the gate. It spends money
-(about two calls per row), so it runs only with `--live`. The floor is 0.80.
+called and nothing leaked; for the intro row, the request is paused at the gate. A row with an
+unknown `expect` fails (a typo never passes silently), and every model call is priced as it
+returns - so a row that errors after spending still counts in the run's cost. It spends money
+(about two calls per row), so it runs only with `--live`. The floor is 0.80 - lower than the
+routing gate's 0.90 on purpose: that gate scores deterministic code, this one a live model.
 
 ### `index.html` - Browser UI
 
@@ -391,7 +396,11 @@ called and nothing leaked; for the intro row, the request is paused at the gate.
   invented - and **📚 Retrieved context** lists each tool call with the text it pulled (cited or
   not); clicking a citation opens the excerpt it points at. An intro request adds a card that
   says it is waiting for the student - the decision is made on `/admin`.
-- **History:** "Follow-ups use the last N turns (kept in this tab)" and **✕ New chat**.
+- **History:** "Follow-ups use the last N turns (kept in this tab)" and **✕ New chat**. An
+  email or phone number in a question is replaced with `[contact]` before the turn is kept, so
+  an intro request's contact details are never re-sent with the next questions.
+- **Errors in plain words:** the caps and the public-deploy guards (rate limit with its
+  retry time, the daily budget, an oversized body) are explained, not shown as raw JSON.
 - **A2A:** **🪪 Fetch Agent Card** (shows the card and **verifies its signature in the browser**
   with WebCrypto: fetches the key its `jku` names, rebuilds the signed bytes, checks ES256) and
   **🤝 Ask over A2A** (reads the card, takes the path from `supportedInterfaces`, sends
@@ -428,7 +437,7 @@ required on Render). Locally, with no token set, every route is open.
 | `/readme` | GET | This file, dark-rendered |
 | `/portfolio` | GET | The build cards - one per week - the profile and both gates' pass rates (no model call) |
 | `/portfolio/{week}` | GET | One build's read page: results, decisions, diagrams (HTML; 404 for an unknown week) |
-| `/.well-known/agent-card.json` (+ `agent.json`) | GET | A2A discovery - the Agent Card, signed when `CARD_SIGNING_SEED` is set |
+| `/.well-known/agent-card.json` (+ `agent.json`) | GET | A2A discovery - the Agent Card, always signed (the `CARD_SIGNING_SEED` key, or one drawn at boot) |
 | `/.well-known/jwks.json` | GET | The public key (JWK Set) that verifies the card's signature |
 | `/a2a` | POST | A2A 1.0 JSON-RPC - `SendMessage` answers like `/ask` |
 | `/ask` | POST | The agent: routed, tools chosen by the model, every source checked |
@@ -603,7 +612,7 @@ What the free plan means in practice:
 ## 9. Run the tests + the eval gates
 
 ```bash
-pytest -q                     # 196 passed in a few seconds - no GPU, no network, no API key
+pytest -q                     # 213 passed in a few seconds - no GPU, no network, no API key
 python eval_run.py            # the routing gate - offline; non-zero exit on a regression
 python eval_tools.py --live   # the tool-choice gate - calls the real model (~28 calls)
 ```
@@ -629,9 +638,16 @@ tool calls and answers, and everything around the model runs for real. It covers
   execute once; a second decision is a 409 with no audit line; the inbox lists only open
   requests; a stranger without the token gets 401s.
 - **Routing, the routes and the card, A2A and the deploy guards, size limits, memory, PII,
-  the build cards and read pages, the UI** - as before: exactly 17 routes, the A2A 1.0 shapes
-  and errors, the rate limit's client key, the daily budget across every call, the audit log
-  scrubbed (a visitor's contact included).
+  the build cards and read pages** - exactly 17 routes, the A2A 1.0 shapes and errors, the
+  rate limit's client key, the daily budget across every call, the audit log scrubbed (an intro
+  line carries its id and reason only - never the visitor's name or contact), a corrupt pack
+  file a 503 (never a 500), and both boot warnings (no signing seed, the placeholder profile).
+- **The pages, as behaviour:** `tests/page_harness.js` runs each page's own script in Node
+  against a fake DOM, with hostile text in every field the page renders - the answer, trace,
+  retrieved context, citations, intro card, build cards, profile, logs, errors - and fails if
+  any of it comes out as HTML. It also checks the gate chips ("26/27 (96.3%)", "not run yet")
+  and that the browser's `canonical()` rebuilds exactly the bytes the server signed. These
+  tests are skipped when Node.js is not installed.
 - **The pack and the gates:** the worst realistic loop fits the ceiling; the golden set's token
   counts, the saved routing results and this README's bill match a fresh run; every tool golden
   row asks for a tool that exists and a source that tool returns; the tool gate's scorer; the
@@ -644,12 +660,12 @@ call no test meant to make fails instead of spending your key.
 `eval_run.py` is the **routing gate**: on the shipped pack the 27 frozen questions route
 19 small / 8 frontier at 1.000 accuracy (27 of 27), and on their first-call tokens the routed
 bill is $0.020576 against $0.040672 all-frontier - **1.98x cheaper**. `eval_tools.py --live` is
-the **tool-choice gate**: 14 questions, floor 0.80, written to `eval_results.json` and shown on
-the site. Wire both into CI and a regression fails the build before it reaches a demo.
+the **tool-choice gate**: 14 questions, floor 0.80 - the reference run passed 14 of 14 - written
+to `eval_results.json` and shown on the site. Wire both into CI and a regression fails the build before it reaches a demo.
 
 ---
 
-## 10. Deliberate simplifications - read this before you copy it into production
+## 10. Deliberate simplifications (read before production)
 
 These are teaching shapes, not production components. Each is a seam, and each names what
 belongs in it.
@@ -670,6 +686,12 @@ belongs in it.
 - **The tools read three static files.**
   - Re-read per call, but nothing writes them except you and the eval scripts.
   - Production: pull the eval section from your latest CI run and version the pack with the code.
+- **A network retry is not re-priced.**
+  - The ceiling is checked before each model call; tenacity may retry that call twice on a
+    timeout or connection error, and a timed-out attempt reports no usage, so neither the
+    ceiling nor the daily meter sees it. Each attempt does spend an iteration, so the 8-call cap
+    still bounds the total.
+  - Production: charge each failed attempt its projected worst case against both meters.
 - **The citation check matches tags, not meaning.**
   - It proves every cited source was returned in this run; it cannot prove the sentence before
     it says what that source says.
@@ -735,7 +757,7 @@ belongs in it.
 
 - **Tools, not the whole pack in the prompt.**
   - The model looks facts up and cites them, so a visitor sees *what* it used and the code can
-    check it. Each call is smaller (about 1,200 input tokens on the first call, against ~5,500
+    check it. Each call is smaller (about 1,300 input tokens on the first call, against ~5,500
     with the pack inlined); a question costs two or three calls.
 - **The tier is code; the tools are the model's.**
   - Routing must be reproducible or the cost report is noise, so the routing key is pure Python

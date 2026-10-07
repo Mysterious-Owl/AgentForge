@@ -171,7 +171,7 @@ def execute_tool(name: str, args: Any, user_id: str = "anon",
         return request_intro(args, user_id, session_id)
     fn = _READ_TOOLS.get(name)
     if fn is None:
-        logger.warning("unknown tool requested: %s", name)
+        logger.warning("unknown tool requested: %r", name)   # %r: no forged log lines
         known = [t["function"]["name"] for t in TOOL_SPECS]
         return ToolEnvelope(success=False, tool=name,
                             error=f"unknown tool '{name}'; known: {known}")

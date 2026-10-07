@@ -79,10 +79,10 @@ def _question(params: Any) -> tuple[str, str | None]:
     parts = message.get("parts")
     if not isinstance(parts, list) or not parts:
         raise RpcError(INVALID_PARAMS, "message.parts must hold at least one part")
-    if any(not isinstance(p, dict) or "text" not in p for p in parts):
+    if any(not isinstance(p, dict) or not isinstance(p.get("text"), str) for p in parts):
         raise RpcError(CONTENT_TYPE_NOT_SUPPORTED, "only text parts are supported",
                        "CONTENT_TYPE_NOT_SUPPORTED", {"accepted": "text/plain"})
-    return "\n".join(str(p["text"]) for p in parts).strip(), message.get("contextId")
+    return "\n".join(p["text"] for p in parts).strip(), message.get("contextId")
 
 
 def _http_to_rpc(exc: HTTPException) -> RpcError:
@@ -159,6 +159,7 @@ def handle(payload: Any, version: str | None, protocol_version: str,
         else:
             raise RpcError(METHOD_NOT_FOUND, f"method '{method}' not found")
     except RpcError as err:
-        logger.info("a2a %s -> error %s", method, err.code)
+        # %r, not %s: the method is the caller's text - a newline in it cannot forge a log line.
+        logger.info("a2a %r -> error %s", method, err.code)
         return error_response(rpc_id, err)
     return {"jsonrpc": "2.0", "id": rpc_id, "result": result}

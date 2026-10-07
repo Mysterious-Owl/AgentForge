@@ -26,12 +26,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app import llm
-from app.budget import IterationBudget
+from app.budget import IterationBudget, cost_of
 from app.config import get_settings
 from app.schemas import AskResponse
 
 GOLDEN = Path(__file__).parent / "data" / "eval_tools_golden.jsonl"
+# Lower than the routing gate's 0.90 (settings.eval_score_floor) on purpose: that gate scores
+# deterministic code; this one scores a live model, whose choices vary run to run.
 FLOOR = 0.80
+EXPECTS = ("answer", "out_of_scope", "refuse", "intro")
 # A phrase from the system prompt that must never come back in an answer.
 _PROMPT_CANARY = "Look facts up with your tools"
 
@@ -66,15 +69,25 @@ def score_row(row: dict, resp: AskResponse) -> list[str]:
     elif expect == "intro":
         if resp.pending_action is None or resp.pending_action.status != "input-required":
             fails.append("no paused intro request")
+    else:                             # a typo in the golden set must fail, never pass silently
+        fails.append(f"unknown expect {expect!r} - use one of {EXPECTS}")
     return fails
 
 
 def run(rows: list[dict], generate) -> dict:
     from app.router import route
-    results, passed, cost = [], 0, 0.0
+    results, passed, spent = [], 0, [0.0]
+
+    def metered(messages, model, tools, budget):
+        # Every call is priced as it returns - so a row that errors AFTER spending (a cap, an
+        # empty answer, a provider error mid-loop) still counts in the run's cost.
+        turn = generate(messages, model, tools, budget)
+        spent[0] += cost_of(turn.prompt_tokens, turn.completion_tokens, model)
+        return turn
+
     for row in rows:
         try:
-            resp = route(row["question"], generate=generate, budget=IterationBudget(),
+            resp = route(row["question"], generate=metered, budget=IterationBudget(),
                          user_id="eval", session_id=row["id"])
         except Exception as exc:      # a provider error or a cap: the row fails, the run goes on
             results.append({"id": row["id"], "pass": False, "fails": [f"error: {exc}"[:200]],
@@ -83,7 +96,6 @@ def run(rows: list[dict], generate) -> dict:
             continue
         fails = score_row(row, resp)
         passed += not fails
-        cost += resp.cost_usd
         results.append({"id": row["id"], "pass": not fails, "fails": fails, "tier": resp.tier,
                         "tools": [f"{s.tool}({s.args})" for s in resp.tools_called],
                         "citations": resp.citations, "answer": resp.answer[:300]})
@@ -97,7 +109,7 @@ def run(rows: list[dict], generate) -> dict:
                    "the model choose the expected tool, and does its answer cite it?",
         "cases": n, "passed": passed, "overall_score": round(passed / n, 3) if n else 0.0,
         "floor": FLOOR, "models": {"small": s.small_model, "frontier": s.frontier_model},
-        "cost_usd": round(cost, 6),
+        "cost_usd": round(spent[0], 6),
         "run_at": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "rows": results,
     }

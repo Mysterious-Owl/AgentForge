@@ -1,7 +1,8 @@
 """Typed settings, loaded once.
 
-All configuration goes through this module. No `os.environ` reads anywhere
-else in the codebase. Missing required env vars fail loudly at startup.
+All configuration goes through this module - the one exception is the tokenizer's cache
+path (`TIKTOKEN_CACHE_DIR`, set in app/budget.py so tiktoken loads its vocabulary from
+data/ offline). Missing required env vars fail loudly at startup.
 
 Two model tiers are pinned here, one per routing decision (dated ids, NEVER
 `-latest`). The routing thesis of the capstone is that most questions do not
@@ -81,8 +82,8 @@ class Settings(BaseSettings):
     model_timeout_s: float = 30.0      # one model call; tenacity retries it on a timeout
 
     # --- Public-deploy guards (app/guard.py) - a shared URL spends YOUR key ---
-    # ADMIN_TOKEN puts the routes that decide or read private state (/approve, /audit,
-    # /memory) behind `Authorization: Bearer <token>`. Unset = open: localhost only.
+    # ADMIN_TOKEN puts the routes that decide or read private state (/actions, /approve,
+    # /audit, /memory) behind `Authorization: Bearer <token>`. Unset = open: localhost only.
     admin_token: str | None = None
     rate_limit_per_minute: int = 30    # POSTs per client per minute; 0 switches it off
     daily_budget_usd: float = 1.00     # model spend per UTC day, all callers together

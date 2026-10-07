@@ -106,7 +106,8 @@
       headers:{'Content-Type':'application/json', ...ownerHeaders(), ...(opts.headers||{})}});
     const d = await r.json().catch(() => ({}));
     if(r.status === 401) throw new Error('Owner only - enter this deployment\'s admin token above.');
-    if(r.status === 409) throw new Error(`This request was already ${d.detail && d.detail.status} - a decision is made once.`);
+    if(r.status === 409) throw Object.assign(new Error(`This request was already `+
+      `${d.detail && d.detail.status} - a decision is made once. Refresh the inbox.`), {decided:true});
     if(!r.ok) throw new Error(`${r.status} - ${typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail)}`);
     return d;
   }
@@ -135,7 +136,8 @@
           {action_id:a.id, approve:b.dataset.decide === 'approve', approver:'owner'})});
         el.replaceWith(renderAction(done));
       } catch(e){
-        buttons.forEach(x => x.disabled = false);
+        // Already decided (409): the buttons stay off - this card can never be decided again.
+        if(!e.decided) buttons.forEach(x => x.disabled = false);
         const err = document.createElement('div');
         err.className = 'error'; err.textContent = e.message;
         el.appendChild(err);                            // on this card - the inbox stays

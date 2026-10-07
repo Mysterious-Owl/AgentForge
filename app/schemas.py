@@ -135,7 +135,7 @@ class PendingAction(BaseModel):
     kind: Literal["request_intro"] = "request_intro"
     name: str
     company: str = ""
-    contact: str                      # PII: kept for the student, scrubbed from logs and audit
+    contact: str                      # PII: kept for the student (/actions only), never logged or audited
     reason: str
     message: str
     # "input-required" (at the gate) -> "executed" (approved) | "rejected" (declined)

@@ -44,6 +44,8 @@ _SOURCE_SHAPE = re.compile(r"[\w./-]+\.(?:md|json)(?: · \S.*)?")
 class EmptyAnswer(RuntimeError):
     """The model finished with no text (blank, whitespace, or out of completion budget) - an
     empty message is never passed on as an answer; the route returns it as a 502."""
+
+
 _ONE_INTRO = "one intro request per question - it is already waiting for the student"
 
 
@@ -127,11 +129,11 @@ def run(question: str, history: list[Turn], pack: dict, model: str, frontier_mod
                 out.sources.append(env.source)
             if env.success and call.name == "request_intro":
                 out.pending = tools.get_action(env.data["action_id"])
-                # Audited the moment it exists - even if a later cap stops this request.
+                # Audited the moment it exists - even if a later cap stops this request. The
+                # id and reason only: the visitor's name and contact stay in the inbox.
                 memory.log_audit(AuditEntry(
                     user_id=user_id, session_id=session_id, kind="intro:proposed",
-                    detail=f"{out.pending.id} from {out.pending.name} ({out.pending.reason}) - "
-                           f"{out.pending.contact}"))
+                    detail=f"{out.pending.id} ({out.pending.reason})"))
             messages.append(llm.tool_result_message(call.id, env.model_dump_json()))
     out.citations, out.unverified = check_citations(out.answer, out.sources)
     logger.info("agent done: %s call(s), tools=%s, citations=%s, unverified=%s",

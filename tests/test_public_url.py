@@ -191,7 +191,9 @@ def test_the_audit_trail_is_scrubbed(monkeypatch):
     lines = client.get("/audit/u2").json()
     details = " | ".join(e["detail"] for e in lines)
     assert "@example.com" not in details and "jane.doe" not in details
-    assert details.count("[REDACTED_EMAIL]") == 4
+    # The intro line carries the action id and reason only - no name, no contact at all.
+    assert lines[0]["kind"] == "intro:proposed" and lines[0]["detail"] == f"{a['id']} ({a['reason']})"
+    assert details.count("[REDACTED_EMAIL]") == 3
     assert "[REDACTED_E" in lines[-1]["detail"]                  # the marker is cut, not the PII
 
 

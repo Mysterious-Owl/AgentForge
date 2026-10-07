@@ -108,3 +108,25 @@ def test_the_profile_is_optional_but_must_be_valid(tmp_path, monkeypatch, text, 
     assert r.status_code == status
     if status == 200:
         assert r.json()["profile"] == {}
+
+
+# ---------- what the student is told at boot ----------
+
+def test_boot_warns_about_a_restart_key_and_the_placeholder_profile(caplog):
+    """Copied as is, the repo boots - and says, in the log, the two things to change."""
+    with caplog.at_level("WARNING", logger="app.main"), TestClient(app):
+        pass
+    text = caplog.text
+    assert "CARD_SIGNING_SEED is not set" in text
+    assert "data/profile.json still says 'Your Name'" in text
+
+
+def test_boot_is_quiet_once_both_are_set(caplog, tmp_path, monkeypatch):
+    import shutil
+    for name in ("AGENTS.md", "architecture.md", "eval_results.json"):
+        shutil.copy(ROOT / "data" / name, tmp_path / name)
+    (tmp_path / "profile.json").write_text('{"name": "Aarav Mehta"}', encoding="utf-8")
+    _settings(monkeypatch, CARD_SIGNING_SEED="seed", DATA_DIR=str(tmp_path))
+    with caplog.at_level("WARNING", logger="app.main"), TestClient(app):
+        pass
+    assert "CARD_SIGNING_SEED" not in caplog.text and "profile.json" not in caplog.text

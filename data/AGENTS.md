@@ -155,7 +155,7 @@ offline.
 
 **What else it carries.** Two eval gates: its routing gate replays 27 frozen questions
 offline, and its tool-choice gate replays 14 against the live model - did it pick the right
-tool, and cite it (see `eval_results.json`). It keeps the last three turns of a conversation
+tool, and cite it: 14 of 14 (see `eval_results.json`). It keeps the last three turns of a conversation
 in the visitor's browser, never on the server. It speaks A2A 1.0 (Agent Card plus JSON-RPC
 `SendMessage` at `/a2a`), keeps a per-user audit log with PII scrubbed, and on its public URL
 has an admin token, a rate limit and a daily spend budget. It is deployed on Render from

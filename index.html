@@ -59,7 +59,7 @@
     .btn-secondary:hover:not(:disabled){ background:var(--surface-3); }
     #health-chip { display:flex; align-items:center; gap:6px; background:var(--surface-2);
       border:1px solid var(--border); border-radius:20px; padding:5px 12px;
-      font-size:12px; font-weight:500; cursor:pointer; color:var(--text-muted); }
+      font:inherit; font-size:12px; font-weight:500; cursor:pointer; color:var(--text-muted); }
     #health-chip:hover { background:var(--surface-3); }
     #health-chip.online { color:var(--green); border-color:#1a4a2e; }
     #health-chip.offline { color:var(--red); border-color:#4a1a1a; }
@@ -85,7 +85,9 @@
     .action-btns button { width:100%; justify-content:center; }
     .scenario-pills { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
     .pill { background:var(--surface-3); color:var(--text-muted); border:1px solid var(--border);
-      border-radius:20px; padding:3px 10px; font-size:11px; cursor:pointer; transition:all .15s; }
+      border-radius:20px; padding:3px 10px; font:inherit; font-size:11px; cursor:pointer; transition:all .15s; }
+    .pill:focus-visible, #health-chip:focus-visible, .build-card:focus-visible {
+      outline:2px solid var(--blue); outline-offset:2px; }
     .pill:hover { background:var(--blue-dim); color:var(--blue); border-color:#1f4080; }
     .char-count { margin-top:6px; font-size:11px; color:var(--text-muted); font-variant-numeric:tabular-nums; }
     .right-panel { display:flex; flex-direction:column; overflow:hidden; }
@@ -195,27 +197,27 @@
     <div class="profile-links" id="profile-links"></div>
     <button class="btn-ghost" onclick="showBuilds()">🗂 My builds</button>
     <button class="btn-ghost" onclick="window.open('/readme','_blank')">📖 README</button>
-    <div id="health-chip" onclick="checkHealth()" title="Click to re-check">
-      <span class="dot"></span><span id="health-text">Checking…</span>
-    </div>
+    <button type="button" id="health-chip" onclick="checkHealth()" title="Click to re-check">
+      <span class="dot"></span><span id="health-text" aria-live="polite">Checking…</span>
+    </button>
   </div>
 </header>
 <main>
   <div class="left-panel">
     <div class="panel-section">
       <div class="input-row">
-        <label style="margin:0">Ask about my capstone</label>
+        <label for="question" style="margin:0">Ask about my capstone</label>
         <button class="btn-ghost" style="padding:4px 10px;font-size:11px" onclick="fillExample(0)">↺ Example</button>
       </div>
       <textarea id="question" oninput="updateCharCount()" placeholder="Ask about the capstone - e.g. what did you build in Week 4?"></textarea>
       <div class="scenario-pills">
-        <span class="pill" onclick="fillExample(0)">Week 4 build</span>
-        <span class="pill" onclick="fillExample(1)">Week 2 results</span>
-        <span class="pill" onclick="fillExample(2)">Why nano?</span>
-        <span class="pill" onclick="fillExample(3)">Compare W5 vs W6</span>
-        <span class="pill" onclick="fillExample(4)">Contact the student</span>
-        <span class="pill" onclick="fillExample(5)">Off-topic (test)</span>
-        <span class="pill" onclick="fillOversized()">Oversized input (413)</span>
+        <button type="button" class="pill" onclick="fillExample(0)">Week 4 build</button>
+        <button type="button" class="pill" onclick="fillExample(1)">Week 2 results</button>
+        <button type="button" class="pill" onclick="fillExample(2)">Why nano?</button>
+        <button type="button" class="pill" onclick="fillExample(3)">Compare W5 vs W6</button>
+        <button type="button" class="pill" onclick="fillExample(4)">Contact the student</button>
+        <button type="button" class="pill" onclick="fillExample(5)">Off-topic (test)</button>
+        <button type="button" class="pill" onclick="fillOversized()">Oversized input (413)</button>
       </div>
       <div id="char-count" class="char-count">0 characters</div>
       <div class="history-row"><span id="history-note">New conversation</span>
@@ -240,7 +242,7 @@
       <div class="pane-header">Output
         <button class="btn-ghost" style="padding:3px 10px;font-size:11px" onclick="clearOutput()">✕ Clear</button>
       </div>
-      <div class="pane-body" id="output-body">
+      <div class="pane-body" id="output-body" aria-live="polite">
         <span class="placeholder-msg">Ask a question or fetch the Agent Card to see output here…</span>
       </div>
     </div>
@@ -277,10 +279,15 @@
     catch(e){ return []; } }
   function saveHistory(h){ try { sessionStorage.setItem(HISTORY_KEY, JSON.stringify(h)); } catch(e){} }
   let HISTORY = loadHistory();
+  // An email or phone number in a question (an intro request) is replaced before the turn is
+  // kept: history rides along with the next three questions, and contact details must not.
+  const CONTACT = [/[^\s@]{1,64}@[^\s@]{1,255}\.[A-Za-z]{2,24}/g, /\+?\d[\d\s().-]{7,}\d/g];
+  const hideContact = t => CONTACT.reduce((s, re) => s.replace(re, '[contact]'), t);
   function rememberTurn(question, answer){
     // Cut by characters (code points), never through the middle of an emoji.
     const cut = t => Array.from(t).slice(0, HISTORY_CHARS).join('');
-    HISTORY = [...HISTORY, {question: cut(question), answer: cut(answer)}].slice(-HISTORY_TURNS);
+    HISTORY = [...HISTORY, {question: cut(hideContact(question)), answer: cut(answer)}]
+      .slice(-HISTORY_TURNS);
     saveHistory(HISTORY); showHistory();
   }
   function showHistory(){
@@ -312,7 +319,9 @@
   async function checkHealth(){
     const chip=document.getElementById('health-chip'), txt=document.getElementById('health-text');
     chip.className=''; txt.textContent='Checking…';
-    try { const r=await fetch(`${API}/health`); const d=await r.json();
+    try { const r=await fetch(`${API}/health`);
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d=await r.json();
       const tiers=`${d.small_model} / ${d.frontier_model}`;
       chip.className='online'; txt.textContent=`Online · ${d.small_model}`;
       addLog('success',`Health OK - tiers: ${tiers}`);
@@ -356,7 +365,7 @@
     } finally { setLoading(false); }
   }
   // FastAPI details arrive three shapes: a 422 validation array, a structured object
-  // (the cost ceiling / iteration cap), or a plain string (503 / 502).
+  // (the caps and the public-deploy guards), or a plain string (503 / 502).
   function formatDetail(detail, fallback){
     if(Array.isArray(detail)) return detail.map(x=>x.msg).join(' | ');
     if(detail && typeof detail === 'object'){
@@ -366,6 +375,17 @@
       if(detail.error === 'iteration_cap_exceeded')
         return `iteration_cap_exceeded: the bounded loop stopped at `+
                `${detail.max_iterations} iterations.`;
+      if(detail.error === 'rate_limited')
+        return `Too many questions - the limit is ${detail.limit_per_minute} per minute. `+
+               `Try again in ${detail.retry_after_s} s.`;
+      if(detail.error === 'daily_budget_exhausted')
+        return `The agent has used today's model budget ($${detail.daily_budget_usd}). `+
+               `It resets at midnight UTC - please come back tomorrow.`;
+      if(detail.error === 'body_too_large')
+        return `The request is too large (over ${detail.limit_bytes.toLocaleString('en-US')} bytes) `+
+               `- refused before it was read.`;
+      if(detail.error === 'length_required')
+        return 'The request had no Content-Length - refused before it was read.';
       return JSON.stringify(detail);
     }
     return detail || fallback;
@@ -581,7 +601,7 @@
   }
   function renderBuilds(d){
     const cards = d.builds.map((b,i)=>`
-      <div class="build-card" tabindex="0" data-build="${i}">
+      <div class="build-card" tabindex="0" role="button" aria-expanded="false" data-build="${i}">
         <div class="build-head"><span class="build-week">W${b.week}</span>
           <span class="build-name">${escHtml(b.name)}</span></div>
         <div class="build-text">${fmtAnswer(b.summary)}</div>
@@ -598,9 +618,10 @@
       `<div class="builds-grid">${cards}</div>`;
     // Bound in code, like the gate buttons: no build text ever passes through an attribute.
     document.querySelectorAll('#output-body .build-card').forEach(c => {
-      const toggle = () => c.classList.toggle('open');
+      const toggle = () => c.setAttribute('aria-expanded', c.classList.toggle('open'));
       c.addEventListener('click', e => { if(!e.target.closest('button,a')) toggle(); });
-      c.addEventListener('keydown', e => { if(e.key==='Enter' && e.target===c) toggle(); });
+      c.addEventListener('keydown', e => {
+        if((e.key==='Enter' || e.key===' ') && e.target===c){ e.preventDefault(); toggle(); } });
     });
     document.querySelectorAll('#output-body [data-ask]').forEach(btn =>
       btn.addEventListener('click', () => askAboutBuild(d.builds[+btn.dataset.ask])));

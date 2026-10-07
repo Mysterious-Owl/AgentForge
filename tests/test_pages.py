@@ -1,14 +1,21 @@
 """The pages: the visitor's index.html, the owner's admin.html and the rendered README.
 
-There is no browser in the suite, so the page-safety properties are checked on the source -
-one stable token per assertion: escaping, no inline handler built from server data, text
-(never HTML) for the student's name, the owner token kept in this tab, one decision per click.
+Two kinds of check. The source greps pin one stable token per property: escaping, no inline
+handler built from server data, text (never HTML) for the student's name, the owner token kept
+in this tab, one decision per click. The behaviour tests run the pages' own script in Node
+against a fake DOM (tests/page_harness.js) with hostile text in every field - skipped when
+Node.js is not installed.
 """
+import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
+from app import signing
 from app.main import app
 
 client = TestClient(app)
@@ -84,3 +91,76 @@ def test_admin_page_safety_greps():
     assert "'Authorization': `Bearer ${t}`" in page           # sent on the owner-only calls
     assert "buttons.forEach(x => x.disabled = true)" in page  # one decision per click
     assert "user === '..'" in page                            # no path walk in the audit lookup
+
+
+# ---------- behaviour: the pages' own script, run in Node against a fake DOM ----------
+
+NODE = shutil.which("node")
+needs_node = pytest.mark.skipif(NODE is None, reason="Node.js is not installed")
+XSS = "\"'><img src=x onerror=alert(1)>"
+
+
+def _run_page(page, fixtures, tmp_path):
+    """Every HTML string the page's script writes for these render calls (page_harness.js)."""
+    spec = tmp_path / "fixtures.json"
+    spec.write_text(json.dumps(fixtures), encoding="utf-8")
+    out = subprocess.run([NODE, str(ROOT / "tests" / "page_harness.js"), str(ROOT / page),
+                          str(spec)], capture_output=True, text=True, encoding="utf-8",
+                         timeout=60, check=True)
+    return json.loads(out.stdout)
+
+
+@needs_node
+def test_no_server_or_model_text_reaches_the_index_page_as_html(tmp_path):
+    """Hostile text in EVERY field the visitor's page renders - the answer, the trace, the
+    retrieved context, citations, the intro card, build cards, the profile, logs, errors -
+    comes out as text. Removing one escHtml anywhere on these paths fails this test."""
+    step = {"tool": XSS, "args": {XSS: XSS}, "success": False, "source": XSS, "error": XSS,
+            "content": XSS}
+    intro = {"id": XSS, "name": XSS, "company": XSS, "contact": XSS, "reason": XSS,
+             "message": XSS, "status": XSS, "result": XSS}
+    answer = {"answer": f"{XSS} [{XSS}]", "model": XSS, "tier": XSS, "complexity": XSS,
+              "grounded": True, "routed_up": True, "tools_called": [step],
+              "citations": [XSS], "unverified_citations": [XSS], "pending_action": intro,
+              "model_calls": 2, "cost_usd": 0.001, "baseline_cost_usd": 0.002,
+              "saved_usd": 0.001}
+    builds = {"title": XSS, "overview": XSS, "builds": [{"week": 4, "name": XSS, "summary": XSS}],
+              "gates": {"routing": {"score": 1.0, "cases": 27, "passed": 27},
+                        "tool_choice": {"score": None, "cases": None, "passed": None}},
+              "profile": {"name": XSS, "headline": XSS, "linkedin": "https://x.example/" + XSS}}
+    written = _run_page("index.html", [["renderAnswer", answer], ["renderAnswer", {**answer,
+                        "pending_action": None}], ["renderBuilds", builds],
+                        ["renderAction", intro], ["addLog", XSS], ["showError", XSS]], tmp_path)
+    assert len(written) >= 6
+    for html in written:
+        assert "<img" not in html, html[:300]
+
+
+@needs_node
+def test_no_server_text_reaches_the_admin_page_as_html(tmp_path):
+    intro = {"id": XSS, "name": XSS, "company": XSS, "contact": XSS, "reason": XSS,
+             "message": XSS, "status": "input-required", "result": XSS}
+    written = _run_page("admin.html", [["renderAction", intro]], tmp_path)
+    assert written and all("<img" not in html for html in written)
+
+
+@needs_node
+@pytest.mark.parametrize("gate,shown", [
+    ({"score": 1.0, "cases": 27, "passed": 27}, "27/27 (100%)"),
+    ({"score": 0.963, "cases": 27, "passed": 26}, "26/27 (96.3%)"),
+    ({"score": None, "cases": None, "passed": None}, "not run yet"),
+])
+def test_the_page_shows_a_gate_as_passed_of_cases_and_a_percentage(tmp_path, gate, shown):
+    [chips] = _run_page("index.html", [["gateChips", {"routing": gate, "tool_choice": gate}]],
+                        tmp_path)
+    assert chips.count(shown) == 2
+
+
+@needs_node
+def test_the_browser_rebuilds_exactly_the_bytes_the_server_signed(tmp_path):
+    """The page verifies the card with its OWN canonical() - it must produce the same bytes
+    as app/signing.canonical, or every visitor sees "signature does not match"."""
+    card = {k: v for k, v in client.get("/.well-known/agent-card.json").json().items()
+            if k != "signatures"}
+    [text] = _run_page("index.html", [["canonical", card]], tmp_path)
+    assert text.encode() == signing.canonical(card)
