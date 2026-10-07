@@ -27,7 +27,7 @@ Why it suits this project:
 | Fact | What it means for you |
 |---|---|
 | **Sleeps after 15 minutes without traffic** | The first visit after a sleep takes about a minute to wake. Open your link before an interview. |
-| **Every wake is a fresh process** | Memory, pending intro requests, the audit log and the day's spend counter start empty (a visitor's chat history lives in their browser). Fine for a demo. |
+| **Every wake is a fresh process** | Memory, pending intro requests, the audit log and the day's spend counter start empty (a visitor's chat history lives in their browser). Set the optional SMTP variables below and every intro request is emailed to you as it arrives, so none is lost. |
 | **No persistent disk** | Nothing written at runtime survives a redeploy. This app keeps no files, so nothing is lost. |
 | **One worker** (`--workers 1` in `render.yaml`) | All the state lives in one process, so one worker is required, not just cheaper. |
 | **512 MB of RAM, 0.1 CPU** | The app refuses a request body over 2 MiB before reading it, caps every text field and bounds its in-memory stores, so a stranger cannot fill the instance. |
@@ -127,6 +127,8 @@ Put the URL on your resume and LinkedIn. Every `git push` to `main` redeploys it
 | `DAILY_BUDGET_USD` | `1.00` | Model spend per UTC day, across every visitor. Then `/ask` and A2A return 429. |
 | `RATE_LIMIT_PER_MINUTE` | `30` | POSTs per client per minute. Then 429 with `Retry-After`. |
 | `TRUST_FORWARDED_FOR` | `true` | Keys the rate limit on the client IP behind Render's proxy: `True-Client-IP` / `CF-Connecting-IP` if present, else the first `X-Forwarded-For` hop. |
+| `SMTP_SENDER` / `SMTP_PASSWORD` | *(unset)* | Optional. A Gmail address and an App Password ([myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), 2-Step Verification on) - each intro request is emailed to you. Unset = no email. |
+| `NOTIFY_EMAIL` | *(unset)* | Optional. Where intro emails go; defaults to `SMTP_SENDER`. |
 | `AGENT_BASE_URL` | *(unset)* | Set it only for a custom domain (no trailing `/` needed); otherwise the card uses `RENDER_EXTERNAL_URL`. Don't paste `.env.example` into **Environment** - a localhost value there would override your Render URL. |
 
 Changing a variable restarts the service.

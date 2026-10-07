@@ -75,6 +75,13 @@ class Settings(BaseSettings):
     # (render.yaml); unset = the card is served unsigned.
     card_signing_seed: str | None = None
 
+    # --- Email the student when an intro request arrives (app/notify.py; optional) ---
+    # Week 1's Gmail SMTP pattern: an App Password, never the account password. The recipient is
+    # fixed here - NOTIFY_EMAIL, else SMTP_SENDER - so no visitor or model can pick it.
+    smtp_sender: str | None = None
+    smtp_password: str | None = None
+    notify_email: str | None = None
+
     # --- The approval gate (Tool layer) ---
     # Every mutating tool waits for an explicit human YES before it executes.
     # Approval is state the system owns, not a sentence the user can assert.

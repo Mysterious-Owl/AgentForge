@@ -54,6 +54,7 @@ signature, that the agent they reached is yours. Your name, headline and links h
 │   ├── scrub.py         <- PII scrubbing as logging filters (app, uvicorn, access log) + the scrub() function the audit log uses
 │   ├── guard.py         <- public-deploy guards: admin token, per-client rate limit, daily spend budget, body-size limit
 │   ├── a2a.py           <- A2A 1.0 JSON-RPC: SendMessage answers with a Message; every other core method answers with the spec's error
+│   ├── notify.py        <- emails the student when an intro request arrives (Week 1's Gmail SMTP pattern; fixed recipient; off the request path; optional)
 │   ├── signing.py       <- signs the Agent Card (detached JWS, ES256) and serves the key as a JWK Set; key derived from CARD_SIGNING_SEED
 │   └── main.py          <- FastAPI app: the 17 routes, the middleware (A2A-Version header, CORS, body limit, rate limit), the Agent Card builder
 ├── data/
@@ -74,6 +75,7 @@ signature, that the agent they reached is yours. Your name, headline and links h
 │   ├── test_deploy.py       <- A2A JSON-RPC, the public-deploy guards, the uvicorn scrubbers
 │   ├── test_hardening.py    <- the route surface, the client lifecycle, tokenizer counting, concurrency, PII labels, whole-word cues, the UI
 │   ├── test_public_url.py   <- what a stranger on the shared URL can do: size limits, who the rate limit counts, strict A2A versions, an honest audit trail
+│   ├── test_notify.py       <- the intro email: off by default, content, a fixed recipient, no header injection, a failed send changes nothing
 │   ├── test_admin_profile.py <- the signed card (verifies; a changed card or another key fails), the /admin page, the profile (http links only)
 │   ├── test_portfolio.py    <- the build cards and read pages: every week of the pack, no package ids, a student's own pack, 404/503, model-free, escaped
 │   └── test_pack.py         <- the pack: the worst-case loop fits the ceiling, golden-set drift, saved results, the tool gate's rows and scorer
@@ -488,7 +490,9 @@ What the free plan means in practice:
   Open your link before an interview.
 - **Every wake is a fresh process**: the memory store, pending intro requests, audit log and the
   day's spend counter start empty. A visitor's chat history survives - it is in their browser.
-  A Redis-backed store is the upgrade.
+  So that no intro request is lost to a restart, set `SMTP_SENDER`, `SMTP_PASSWORD` (a Gmail App
+  Password) and optionally `NOTIFY_EMAIL` in **Environment**: each request is emailed to you the
+  moment it arrives. A database (e.g. hosted Postgres) is the upgrade for a durable inbox.
 - **One worker on purpose** - all of the server state lives in one process.
 - On Render the app **refuses to boot without `ADMIN_TOKEN`**, so the inbox and the gate are
   never public by accident. Any visitor can ask for an intro and watch it pause; only you decide.
@@ -531,7 +535,7 @@ What the free plan means in practice:
 ## 9. Run the tests + the eval gates
 
 ```bash
-pytest -q                     # 211 passed in a few seconds - no GPU, no network, no API key
+pytest -q                     # 218 passed in a few seconds - no GPU, no network, no API key
 python eval_run.py            # the routing gate - offline; non-zero exit on a regression
 python eval_tools.py --live   # the tool-choice gate - calls the real model (~28 calls)
 ```
@@ -587,10 +591,12 @@ belongs in it.
     spend are Python dicts behind locks - bounded, but not shared and not durable.
   - Production: Redis (or a database) behind the same functions in `memory.py`, `tools.py`
     and `guard.py`.
-- **An approved intro is simulated.**
-  - `_execute()` in `tools.py` returns a result string; no email is sent.
-  - The gate around it is real: a real mailer drops in behind `_execute()` without the gate
-    changing.
+- **The inbox is in memory; the email is the durable copy.**
+  - Pending intros vanish on a restart; with SMTP configured, each one was already emailed to you
+    (`app/notify.py` - Week 1's Gmail SMTP pattern, sent off the request path, to a recipient the
+    environment fixes, never one the visitor or model names).
+  - Approving marks the request accepted (`_execute()` in `tools.py`); replying is up to you.
+  - Production: a database for the inbox and audit log behind the same functions.
 - **The history is the visitor's to send.**
   - It comes from the browser, so it can say anything - including a fake earlier "answer". It is
     treated as data, it cannot move the tier, and nothing it says can approve an action.
