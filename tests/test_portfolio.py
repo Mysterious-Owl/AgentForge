@@ -74,7 +74,7 @@ def test_week_tags_cover_ranges():
          "<b>Ground or refuse.</b>",                              # the decision citing W5
          "<mark>  Retrieval .. KnowledgeVault index",             # (W4-W6) covers W5
          "href='/portfolio/4'", "href='/portfolio/6'"], []),
-    (17, ["PortfolioAgent routing gate", "27 frozen questions", "routing accuracy 1.0",
+    (17, ["PortfolioAgent routing gate", "27 frozen questions", "routing 27/27 (100%)",
           "<h2>In depth</h2>", "<h3>Key decisions</h3>",           # the week file, when present
           "<li><b>Tools instead of the whole pack in the prompt</b>"], []),
     (1, ["No eval run is recorded for this week"], ["href='/portfolio/0'"]),   # no link before W1

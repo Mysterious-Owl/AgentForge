@@ -169,6 +169,57 @@ the slot by passing the **tool-choice gate** as nano does - `python eval_tools.p
 `SMALL_MODEL` pointed at it. Week 2 is the warning: on its golden set nano scored 93.3% and the
 local qwen3:0.6b 66.7%. The routing gate cannot tell you this - it never calls a model.
 
+### Make it yours - do this before you share the link
+
+The repo ships with a placeholder profile: copied as is, your page says **"Your Name"** with
+links to `your-handle`. The server logs a warning at boot until you change it.
+
+**Step 1 - your profile.** Edit `data/profile.json`. It fills the page header (your name, your
+initials or photo, the LinkedIn / GitHub / Resume buttons) and the About line under the overview
+("Built by *name* - *headline*"):
+
+```json
+{
+  "name": "Your Name",
+  "headline": "AI Engineer - AgentForge capstone",
+  "linkedin": "https://www.linkedin.com/in/your-handle",
+  "github": "https://github.com/your-handle",
+  "resume": "https://example.com/your-resume.pdf",
+  "photo": ""
+}
+```
+
+| Field | What to put | If you leave it out |
+|---|---|---|
+| `name` | Your name as a recruiter should read it (max 120 chars) | **the whole profile is skipped**: the header says "AgentForge", no buttons, no About line |
+| `headline` | One line - role and capstone (max 120 chars) | the About line has your name only |
+| `linkedin`, `github`, `resume` | Full `https://` URLs (a public PDF or Drive link for the resume) | that button is hidden |
+| `photo` | An `https://` image URL, square works best | your initials in a circle |
+
+Links must start with `http://` or `https://` - anything else (`javascript:`, a bare
+`linkedin.com/...`) is dropped, so that button simply disappears. Restart the server and reload:
+the header shows your name, and `GET /portfolio` returns the `profile` block.
+
+**Step 2 - your owner page (`/admin`).** Visitors can ask to reach you; the agent files the
+request and it waits for you on `/admin`, which only you can use:
+
+1. Set the token. Locally, add `ADMIN_TOKEN=<any long random string>` to `.env` (without it,
+   locally, the owner routes are open - fine on your laptop, never on a public URL). On Render
+   the Blueprint generates it: copy it from the service's **Environment** tab.
+2. Open `http://localhost:8000/admin` (or `https://<your-service>.onrender.com/admin`) and paste
+   the token into **Admin token** - it is saved as you type, in this tab only (`sessionStorage`).
+3. Test it: on the main page click the **Contact the student** pill, then **Ask**. On `/admin`
+   click **Refresh inbox** - the request is there with the visitor's name, contact and reason.
+   **✓ Approve** or **✕ Reject** it; **🧾 Audit log** shows the trail for a user id.
+4. Check the lock: on the deployed URL, open `/admin` in a private window and click **Refresh
+   inbox** with no token - it answers "Owner only", which is all a stranger gets.
+
+The inbox lives in memory: a restart (or a Render free-tier sleep) empties it - see
+[Deliberate simplifications](#10-deliberate-simplifications---read-this-before-you-copy-it-into-production).
+
+**Step 3 - your pack.** Replace the files in `data/` with your own capstone's - see
+[What goes in the pack](#5-what-goes-in-the-pack).
+
 ---
 
 ## 3. File-by-file walkthrough
@@ -296,7 +347,8 @@ canonicalised (keys sorted, no whitespace), with a header naming the key (`kid`)
 fetch it (`jku`). `jwks()` serves the public key at `/.well-known/jwks.json`; `verify_card()` is
 what a careful caller runs. The P-256 key is derived from `CARD_SIGNING_SEED` (its SHA-256), so a
 deploy has no key file to manage; ECDSA signs with a fresh nonce each time, so one signature per
-card is kept and both card paths serve the same bytes. No seed, no signature.
+card is kept and both card paths serve the same bytes. No seed: the card is still signed, with a
+key drawn at boot (`card_key: "ephemeral"` on `/health`) - never served unsigned.
 
 ### `app/main.py` - FastAPI routes
 Thin handlers for the 17 routes in section 4, the middleware and `build_agent_card()`. The body
@@ -482,8 +534,9 @@ a missing header included - and it **signs its card**: `signatures` holds a deta
 (ES256) over the card without that field (keys sorted, no whitespace), with a header naming the
 key (`kid`) and where to fetch it (`jku` = `/.well-known/jwks.json`). Change one character of the
 card - say, point `supportedInterfaces` at another host - and the signature no longer verifies.
-The key is derived from one setting, `CARD_SIGNING_SEED`, which Render generates; without it
-(locally) the card is served unsigned and carries no `signatures` list.
+The key is derived from one setting, `CARD_SIGNING_SEED`, which Render generates. Without it
+(locally) the card is still signed, with a key drawn at boot - it verifies, but it changes on
+every restart, so `/health` reports `card_key: "ephemeral"` and the log warns.
 
 ---
 

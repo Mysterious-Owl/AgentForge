@@ -607,8 +607,10 @@
   }
   function gateChips(g){
     if(!g) return '';
+    // "27/27 (100%)" - passed of cases, then the score as a percentage.
+    const pct = s => `${Math.round(s*1000)/10}%`;
     const chip = (label, x) => `<span class="gate-chip">${label}: ${x && x.score!=null
-      ? `<b>${x.passed!=null?x.passed+'/'+x.cases:x.cases+' Qs'}</b> · ${x.score}` : 'not run yet'}</span>`;
+      ? `<b>${x.passed!=null?x.passed+'/'+x.cases:x.cases+' Qs'} (${pct(x.score)})</b>` : 'not run yet'}</span>`;
     return chip('Routing gate', g.routing) + chip('Tool-choice gate', g.tool_choice);
   }
   // Fills the question only - nothing is sent (and nothing is spent) until Ask is clicked.

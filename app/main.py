@@ -85,6 +85,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     get_context()             # probe: raises ContextPackError -> the boot fails loudly
     logger.info("startup complete: config loaded, context pack loaded, small=%s frontier=%s",
                 settings.small_model, settings.frontier_model)
+    if not signing.key_is_stable():
+        logger.warning("CARD_SIGNING_SEED is not set: the Agent Card is signed with a key drawn "
+                       "at boot - it changes on every restart")
+    if portfolio.profile().get("name", portfolio.PLACEHOLDER_NAME) == portfolio.PLACEHOLDER_NAME:
+        logger.warning("data/profile.json still says %r - put your name and links in it",
+                       portfolio.PLACEHOLDER_NAME)
     yield
 
 
@@ -165,12 +171,10 @@ def build_agent_card() -> AgentCard:
 
 
 def card_document() -> dict[str, Any]:
-    """The card as served: its JSON, plus `signatures` - a detached JWS over exactly that JSON -
-    when this deployment has a signing seed (app/signing.py). Unsigned, it carries no
-    `signatures` at all."""
+    """The card as served: its JSON, plus `signatures` - a detached JWS over exactly that JSON
+    (app/signing.py). Always signed: with the CARD_SIGNING_SEED key, or one drawn at boot."""
     card = build_agent_card().model_dump(mode="json", by_alias=True, exclude_none=True)
-    signatures = signing.sign_card(card, get_settings().agent_base_url)
-    return {**card, "signatures": signatures} if signatures else card
+    return {**card, "signatures": signing.sign_card(card, get_settings().agent_base_url)}
 
 
 def _card_json() -> Response:
@@ -212,7 +216,9 @@ def health() -> dict[str, Any]:
         "cost_ceiling_usd": s.cost_ceiling_usd,
         # Lets the UI label the owner-only buttons on a deployment instead of failing on them.
         "admin_token_required": bool(s.admin_token),
-        "card_signed": bool(s.card_signing_seed),
+        "card_signed": True,
+        # "stable" = from CARD_SIGNING_SEED; "ephemeral" = drawn at boot, new on every restart.
+        "card_key": "stable" if signing.key_is_stable() else "ephemeral",
         "pricing_per_1m": {
             "small": {"input": s.small_input_cost_per_1m, "output": s.small_output_cost_per_1m},
             "frontier": {"input": s.frontier_input_cost_per_1m,

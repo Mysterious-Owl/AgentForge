@@ -289,6 +289,6 @@ class AgentCard(BaseModel):
     skills: list[AgentSkill] = Field(default_factory=list)
 
     # A2A 1.0 lets a publisher sign the card with JWS so a client can verify who published it.
-    # app/signing.py fills it when CARD_SIGNING_SEED is set; without a seed it stays None and
-    # is left out of the JSON - an unsigned card claims no signature.
+    # app/signing.py always fills it on the served card (CARD_SIGNING_SEED's key, or one drawn
+    # at boot); left None, it is dropped from the JSON - an unsigned card claims no signature.
     signatures: list[AgentCardSignature] | None = None

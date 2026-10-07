@@ -111,9 +111,11 @@ the inbox, approve and the audit log answer "owner only" - honestly, not with an
 
 The card is signed with a key derived from `CARD_SIGNING_SEED`, which the Blueprint generates.
 Check it: **Fetch Agent Card** on your page should say **✓ signature verified**, and
-`/.well-known/jwks.json` should list one key. If you created the service before this setting
-existed, add `CARD_SIGNING_SEED` (any long random string) in **Environment** - or sync the
-Blueprint - and redeploy.
+`/.well-known/jwks.json` should list one key, and `/health` should say `"card_key": "stable"`.
+If it says `"ephemeral"`, the service has no `CARD_SIGNING_SEED` (it was created before this
+setting, or by hand): the card is still signed, but with a key that changes on every restart.
+Add `CARD_SIGNING_SEED` (any long random string) in **Environment** - or sync the Blueprint -
+and redeploy.
 
 ### 7. Share the link
 Put the URL on your resume and LinkedIn. Every `git push` to `main` redeploys it.

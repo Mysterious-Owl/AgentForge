@@ -14,14 +14,16 @@ because every browser's WebCrypto verifies it - the page checks the signature it
 
 The key comes from ONE setting, CARD_SIGNING_SEED: its SHA-256 is the P-256 private scalar.
 Render generates the seed (render.yaml, `generateValue`), so a deploy signs with no key file to
-manage; without the setting (locally, the tests) the card is served unsigned and says nothing
-else. Rotating the seed rotates the key - callers re-fetch the JWKS by `kid`.
+manage. Without the setting (locally, the tests) the card is STILL signed - with a seed drawn at
+boot, so the key changes on every restart (`/health` says `card_key: "ephemeral"`). Rotating
+the seed rotates the key - callers re-fetch the JWKS by `kid`.
 """
 from __future__ import annotations
 
 import base64
 import hashlib
 import json
+import secrets
 from typing import Any
 
 from cryptography.exceptions import InvalidSignature
@@ -39,6 +41,8 @@ _P256_ORDER = int("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632
 # ECDSA draws a fresh nonce per signature, so the same card would get a different signature on
 # every request. One signature per (key, card) keeps the card's bytes stable across requests.
 _SIGNED: dict[tuple[str, bytes], str] = {}
+# No CARD_SIGNING_SEED: one random seed for this process - the card is never served unsigned.
+_BOOT_SEED = secrets.token_urlsafe(32)
 
 
 def b64url(data: bytes) -> str:
@@ -54,10 +58,13 @@ def canonical(obj: Any) -> bytes:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
 
 
-def _private_key() -> ec.EllipticCurvePrivateKey | None:
-    seed = get_settings().card_signing_seed
-    if not seed:
-        return None
+def key_is_stable() -> bool:
+    """True when the key comes from CARD_SIGNING_SEED (survives restarts), not the boot seed."""
+    return bool(get_settings().card_signing_seed)
+
+
+def _private_key() -> ec.EllipticCurvePrivateKey:
+    seed = get_settings().card_signing_seed or _BOOT_SEED
     scalar = int.from_bytes(hashlib.sha256(seed.encode()).digest(), "big") % (_P256_ORDER - 1) + 1
     return ec.derive_private_key(scalar, ec.SECP256R1())
 
@@ -72,20 +79,16 @@ def key_id(x: bytes, y: bytes) -> str:
 
 
 def jwks() -> dict[str, list[dict[str, str]]]:
-    """The public half, as a JWK Set (empty when signing is off)."""
+    """The public half, as a JWK Set."""
     key = _private_key()
-    if key is None:
-        return {"keys": []}
     x, y = _xy(key)
     return {"keys": [{"kty": "EC", "crv": "P-256", "x": b64url(x), "y": b64url(y),
                       "kid": key_id(x, y), "alg": "ES256", "use": "sig"}]}
 
 
-def sign_card(card: dict[str, Any], base_url: str) -> list[dict[str, str]] | None:
-    """`signatures` for this card, or None when no signing seed is set."""
+def sign_card(card: dict[str, Any], base_url: str) -> list[dict[str, str]]:
+    """`signatures` for this card."""
     key = _private_key()
-    if key is None:
-        return None
     kid = key_id(*_xy(key))
     header = {"alg": "ES256", "jku": f"{base_url}{JWKS_PATH}", "kid": kid, "typ": "JOSE"}
     protected = b64url(canonical(header))

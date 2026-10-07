@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     # `A2A-Version` header of every response; /a2a refuses a client asking for another.
     a2a_protocol_version: str = "1.0"
     # Signs the Agent Card (app/signing.py): its SHA-256 is the P-256 key. Render generates it
-    # (render.yaml); unset = the card is served unsigned.
+    # (render.yaml); unset = signed with a key drawn at boot (changes on every restart).
     card_signing_seed: str | None = None
 
     # --- The two caps (app/budget.py enforces BOTH; /health surfaces BOTH) ---

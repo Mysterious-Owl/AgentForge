@@ -117,7 +117,7 @@ def main(argv: list[str]) -> int:
     doc["portfolioagent_tool_gate"] = results
     path.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8",
                     newline="\n")
-    print(f"\n{results['passed']}/{results['cases']} passed ({results['overall_score']}) - "
+    print(f"\n{results['passed']}/{results['cases']} passed ({results['overall_score']:.0%}) - "
           f"${results['cost_usd']:.6f}")
     if results["overall_score"] < FLOOR:
         print(f"TOOL GATE FAILED: below the floor {FLOOR}")

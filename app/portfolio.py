@@ -96,6 +96,8 @@ def section(name: str) -> dict | None:
 
 
 _PROFILE_TEXT = ("name", "headline")
+# The template's profile.json ships with this name; boot warns while it is still there.
+PLACEHOLDER_NAME = "Your Name"
 _PROFILE_LINKS = ("linkedin", "github", "resume", "photo")
 
 
@@ -165,6 +167,13 @@ def gates() -> dict:
     return out
 
 
+def pass_rate(gate: dict) -> str:
+    """'27/27 (100%)' - passed of cases, then the score as a percentage."""
+    score = gate.get("overall_score")
+    pct = f"{round(score * 100, 1):g}%" if isinstance(score, (int, float)) else "n/a"
+    return f"{gate.get('passed')}/{gate.get('cases')} ({pct})"
+
+
 def _results(evals: dict, week: int) -> list[dict]:
     """That week's eval entries as label/fields; Week 17 shows its own routing gate."""
     out = []
@@ -176,7 +185,7 @@ def _results(evals: dict, week: int) -> list[dict]:
         cost = gate.get("cost", {})
         out.append({"label": "PortfolioAgent routing gate", "fields": {
             "set": f"{gate.get('cases')} frozen questions",
-            "measured": f"routing accuracy {gate.get('overall_score')}, "
+            "measured": f"routing {pass_rate(gate)}, "
                         f"split {gate.get('metrics', {}).get('by_tier')}",
             "cost": f"routed ${cost.get('routed_total_usd')} vs all-frontier "
                     f"${cost.get('all_frontier_total_usd')}"}})
@@ -184,8 +193,7 @@ def _results(evals: dict, week: int) -> list[dict]:
     if week == 17 and isinstance(tool_gate, dict):
         out.append({"label": "PortfolioAgent tool-choice gate", "fields": {
             "set": f"{tool_gate.get('cases')} frozen questions, run against the live model",
-            "measured": f"{tool_gate.get('passed')}/{tool_gate.get('cases')} passed "
-                        f"({tool_gate.get('overall_score')})"}})
+            "measured": f"{pass_rate(tool_gate)} passed"}})
     return out
 
 

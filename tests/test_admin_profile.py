@@ -23,10 +23,12 @@ def _settings(monkeypatch, **env):
 
 # ---------- the signed Agent Card ----------
 
-def test_without_a_seed_the_card_is_unsigned_and_the_key_set_empty():
-    assert "signatures" not in client.get("/.well-known/agent-card.json").json()
-    assert client.get("/.well-known/jwks.json").json() == {"keys": []}
-    assert client.get("/health").json()["card_signed"] is False
+def test_without_a_seed_the_card_is_still_signed_with_a_boot_key():
+    card = client.get("/.well-known/agent-card.json").json()
+    keys = client.get("/.well-known/jwks.json").json()
+    assert card["signatures"] and signing.verify_card(card, keys)
+    health = client.get("/health").json()
+    assert health["card_signed"] is True and health["card_key"] == "ephemeral"
 
 
 def test_a_signed_card_verifies_against_the_published_key(monkeypatch):
@@ -38,7 +40,7 @@ def test_a_signed_card_verifies_against_the_published_key(monkeypatch):
     assert header == {"alg": "ES256", "jku": "http://localhost:8000/.well-known/jwks.json",
                       "kid": keys["keys"][0]["kid"], "typ": "JOSE"}
     assert keys["keys"][0]["kty"] == "EC" and keys["keys"][0]["crv"] == "P-256"
-    assert client.get("/health").json()["card_signed"] is True
+    assert client.get("/health").json()["card_key"] == "stable"
 
 
 def test_a_changed_card_or_another_key_fails_verification(monkeypatch):
