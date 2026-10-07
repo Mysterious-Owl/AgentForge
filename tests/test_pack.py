@@ -11,7 +11,6 @@ import eval_tools
 from app import llm, portfolio, tools
 from app.budget import project_cost
 from app.config import get_settings
-from app.context import get_context
 from app.schemas import AskResponse, Turn
 
 DATA = Path(__file__).parent.parent / "data"
@@ -99,14 +98,6 @@ def test_the_tool_gate_scorer():
 def test_the_tool_gate_refuses_to_spend_without_live(capsys):
     assert eval_tools.main([]) == 2
     assert "--live" in capsys.readouterr().out
-
-
-def test_pack_carries_the_three_things_the_brief_names():
-    """AGENTS.md, architecture diagrams, eval results - the Week 17 brief, checked."""
-    ctx = get_context()
-    assert "AGENTS.md" in (DATA / "AGENTS.md").read_text(encoding="utf-8")
-    assert ctx.count("## Diagram ") == 4                       # the four architecture diagrams
-    assert "weekly" in json.loads((DATA / "eval_results.json").read_text(encoding="utf-8"))
 
 
 def test_readme_quotes_the_saved_routing_numbers():

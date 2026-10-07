@@ -69,14 +69,14 @@ signature, that the agent they reached is yours. Your name, headline and links h
 │   ├── __init__.py
 │   ├── conftest.py          <- hermetic setup: no .env, no shell overrides, a dead model URL; resets every store per test
 │   ├── scripted.py          <- a scripted model: plays tool calls and answers through the REAL loop, offline
-│   ├── test_agent.py        <- the loop: the five tools, envelopes back to the model, citation checks, history, the ceiling across calls, the gate
-│   ├── test_endpoint.py     <- the routes, the card, routing, the caps, the approval gate, memory, PII, the routing gate
-│   ├── test_deploy.py       <- A2A JSON-RPC, the public-deploy guards, the uvicorn scrubbers
-│   ├── test_hardening.py    <- the route surface, the client lifecycle, tokenizer counting, concurrency, PII labels, whole-word cues, the UI
+│   ├── test_agent.py        <- the loop: the five tools, envelopes back to the model, citation checks, history, the ceiling across calls, one intro per question
+│   ├── test_endpoint.py     <- health, the card, routing, the iteration cap, the approval gate, memory (and its user cap), PII patterns
+│   ├── test_deploy.py       <- A2A JSON-RPC, the admin token on every owner route, the rate limit's window, the daily budget and its rollover, the uvicorn scrubbers
+│   ├── test_hardening.py    <- the route surface, the client lifecycle, tokenizer counting, concurrency, whole-word cues, retries
 │   ├── test_public_url.py   <- what a stranger on the shared URL can do: size limits, who the rate limit counts, strict A2A versions, an honest audit trail
-│   ├── test_audit_fixes.py  <- one regression test per defect the code audit found (intro flooding, rate-limit table, scrub speed, PII cut, ...)
-│   ├── test_admin_profile.py <- the signed card (verifies; a changed card or another key fails), the /admin page, the profile (http links only)
-│   ├── test_portfolio.py    <- the build cards and read pages: every week of the pack, no package ids, a student's own pack, 404/503, model-free, escaped
+│   ├── test_admin_profile.py <- the signed card (verifies; a changed or hostile card or another key fails), the profile (http links only)
+│   ├── test_portfolio.py    <- the build cards and read pages: every week of the pack, no package ids, a student's own pack, 404/503, escaped
+│   ├── test_pages.py        <- the pages are served, the README renders, and the page-safety properties of index.html and admin.html
 │   └── test_pack.py         <- the pack: the worst-case loop fits the ceiling, golden-set drift, saved results, the tool gate's rows and scorer
 ├── index.html           <- browser UI for visitors (served at GET /)
 ├── admin.html           <- the owner's page (served at GET /admin): token, intro inbox, audit log
@@ -550,7 +550,7 @@ What the free plan means in practice:
 ## 9. Run the tests + the eval gates
 
 ```bash
-pytest -q                     # 225 passed in a few seconds - no GPU, no network, no API key
+pytest -q                     # 196 passed in a few seconds - no GPU, no network, no API key
 python eval_run.py            # the routing gate - offline; non-zero exit on a regression
 python eval_tools.py --live   # the tool-choice gate - calls the real model (~28 calls)
 ```

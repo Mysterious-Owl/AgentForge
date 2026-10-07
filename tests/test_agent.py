@@ -2,7 +2,7 @@
 
 Every test drives the REAL loop (app/agent.py) with a scripted model - what is under test is
 everything around the model: the tools, the envelopes it gets back, the citation check, the
-history, and the ceiling across calls. Offline: no network, no key.
+history, the ceiling across calls and the gate. Offline: no network, no key.
 """
 import json
 from pathlib import Path
@@ -10,11 +10,13 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app import agent, llm, tools
+from app import agent, llm, memory, tools
 from app.main import app
+from app.schemas import ModelTurn, ToolCall, ToolEnvelope
 from tests.scripted import answer, calls, scripted
 
 client = TestClient(app)
+INTRO = {"name": "X", "contact": "x@y.example", "reason": "other", "message": "hi"}
 
 
 def _ask(question, **extra):
@@ -32,11 +34,27 @@ def test_the_model_is_offered_exactly_five_tools(monkeypatch):
                        "request_intro"]
 
 
-def test_get_week_details_returns_the_week_file():
-    env = tools.execute_tool("get_week_details", {"week": 17})
-    assert env.success and env.source == "weeks/w17.md"
-    assert env.data["text"].startswith("# W17 · Demo Day + PortfolioAgent")
-    assert "## Key decisions" in tools.excerpt(env)
+@pytest.mark.parametrize("name,args,source,fact", [
+    ("get_build", {"week": 4}, "AGENTS.md · W4", "KnowledgeVault"),
+    ("get_eval_results", {"week": 2}, "eval_results.json · W2", "nano 93.3% (p95 1,185 ms"),
+    ("get_eval_results", {"week": 1}, "eval_results.json · W1",
+     "no eval run is recorded for this week"),
+    ("get_week_details", {"week": 17}, "weeks/w17.md", "# W17 · Demo Day + PortfolioAgent"),
+    ("get_architecture", {"section": "decisions"}, "architecture.md · decisions",
+     "Ground or refuse"),
+    ("get_architecture", {"section": "diagram_2"}, "architecture.md · diagram_2",
+     "cross-encoder rerank"),
+    ("get_architecture", {"week": 10}, "architecture.md · W10", "**Approval is state.** "),
+    ("get_architecture", {"week": 1}, "architecture.md · W1",
+     "no decision or diagram line cites this week"),
+])
+def test_read_tools_return_data_and_source(name, args, source, fact):
+    env = tools.execute_tool(name, args)
+    assert env.success and env.source == source
+    assert fact in json.dumps(env.data, ensure_ascii=False)
+    # a week-scoped architecture read carries only the lines tagged with that week
+    for group in env.data.get("diagram_lines", []):
+        assert all(f"W{args['week']}" in line for line in group["lines"]), group
 
 
 def test_a_week_without_a_detail_file_says_so(tmp_path, monkeypatch):
@@ -50,54 +68,18 @@ def test_a_week_without_a_detail_file_says_so(tmp_path, monkeypatch):
     assert env.success is False and "use get_build" in env.error
 
 
-def test_get_architecture_by_week_returns_only_that_weeks_part():
-    env = tools.execute_tool("get_architecture", {"week": 10})
-    assert env.success and env.source == "architecture.md · W10"
-    assert [d[:23] for d in env.data["decisions"]] == ["**Approval is state.** "]
-    titles = [g["diagram"] for g in env.data["diagram_lines"]]
-    assert titles[0].startswith("Diagram 1") and any(t.startswith("Diagram 3") for t in titles)
-    assert all("W10" in line for g in env.data["diagram_lines"] for line in g["lines"])
-    none = tools.execute_tool("get_architecture", {"week": 1})
-    assert none.success and none.data["note"] == "no decision or diagram line cites this week"
-
-
-@pytest.mark.parametrize("args,error", [
-    ({"section": "decisions", "week": 2}, "either section or week"),
-    ({}, "a section or a week"),
-])
-def test_get_architecture_needs_exactly_one_of_section_or_week(args, error):
-    env = tools.execute_tool("get_architecture", args)
-    assert env.success is False and error in env.error
-
-
-def test_get_build_returns_the_week_and_its_source():
-    env = tools.execute_tool("get_build", {"week": 4})
-    assert env.success and env.data["name"] == "KnowledgeVault"
-    assert env.source == "AGENTS.md · W4"
-
-
-def test_get_eval_results_returns_that_weeks_entries():
-    env = tools.execute_tool("get_eval_results", {"week": 2})
-    assert env.success and env.source == "eval_results.json · W2"
-    assert "nano 93.3% (p95 1,185 ms" in json.dumps(env.data)
-    empty = tools.execute_tool("get_eval_results", {"week": 1})
-    assert empty.success and empty.data["note"] == "no eval run is recorded for this week"
-
-
-def test_get_architecture_returns_a_named_section():
-    env = tools.execute_tool("get_architecture", {"section": "decisions"})
-    assert env.success and env.source == "architecture.md · decisions"
-    assert "Ground or refuse" in env.data["text"]
-    diagram = tools.execute_tool("get_architecture", {"section": "diagram_2"})
-    assert "cross-encoder rerank" in diagram.data["text"]
-
-
 @pytest.mark.parametrize("name,args,error", [
     ("delete_everything", {}, "unknown tool"),
     ("get_build", {"week": 99}, "no Week 99"),
+    ("get_build", {"week": 0}, "weeks are 1-17"),
+    ("get_build", {"week": 18}, "weeks are 1-17"),
+    ("get_build", {"week": -4}, "weeks are 1-17"),
+    ("get_build", {"week": 10 ** 300}, "weeks are 1-17"),
     ("get_build", {"week": "four"}, "week must be an integer"),
     ("get_build", {}, "week must be an integer"),
     ("get_architecture", {"section": "secrets"}, "unknown section"),
+    ("get_architecture", {"section": "decisions", "week": 2}, "either section or week"),
+    ("get_architecture", {}, "a section or a week"),
 ])
 def test_a_bad_call_is_an_envelope_never_a_crash(name, args, error):
     env = tools.execute_tool(name, args)
@@ -116,11 +98,14 @@ def test_the_envelope_goes_back_to_the_model(monkeypatch):
     assert body["grounded"] is True and body["model_calls"] == 3
 
 
-def test_arguments_that_are_not_json_are_an_envelope(monkeypatch):
-    from app.schemas import ModelTurn, ToolCall
-    broken = ModelTurn(tool_calls=[ToolCall(id="c0", name="get_build", arguments="{week: 4")])
+@pytest.mark.parametrize("arguments", ["{week: 4", "[" * 100_000 + "]" * 100_000],
+                         ids=["not_json", "nested_past_the_recursion_limit"])
+def test_unparseable_arguments_are_a_tool_error(monkeypatch, arguments):
+    broken = ModelTurn(tool_calls=[ToolCall(id="c0", name="get_build", arguments=arguments)])
     monkeypatch.setattr(llm, "chat", scripted(broken, answer("OUT_OF_SCOPE sorry.")))
-    step = _ask("What did you build in Week 4?").json()["tools_called"][0]
+    r = _ask("What did you build in Week 4?")
+    assert r.status_code == 200
+    step = r.json()["tools_called"][0]
     assert step["success"] is False and step["error"] == "arguments were not valid JSON"
 
 
@@ -131,6 +116,13 @@ def test_several_tools_in_one_turn_run_in_order(monkeypatch):
     body = _ask("Compare what Week 5 and Week 6 built.").json()
     assert [s["args"] for s in body["tools_called"]] == [{"week": 5}, {"week": 6}]
     assert body["citations"] == ["AGENTS.md · W5", "AGENTS.md · W6"]
+
+
+def test_an_empty_answer_is_refused_not_passed_on(monkeypatch):
+    for blank in ("", "   \n\t "):
+        monkeypatch.setattr(llm, "chat", scripted(answer(blank)))
+        r = _ask("What did you build in Week 4?")
+        assert r.status_code == 502 and "empty answer" in r.json()["detail"]
 
 
 # ---------- the system prompt carries an index, never the facts ----------
@@ -156,28 +148,17 @@ def test_citation_check_splits_verified_from_invented():
     # a markdown link is not a citation
 
 
-def test_an_invented_source_is_not_grounded(monkeypatch):
-    monkeypatch.setattr(llm, "chat", scripted(
-        calls("get_build", week=4),
-        answer("It scored 99% [eval_results.json · W4] and ingests PDFs [AGENTS.md · W4].")))
-    body = _ask("What did you build in Week 4?").json()
-    assert body["citations"] == ["AGENTS.md · W4"]
-    assert body["unverified_citations"] == ["eval_results.json · W4"]
-    assert body["grounded"] is False                     # one fake source spoils the answer
-
-
-def test_an_answer_with_no_citation_is_not_grounded(monkeypatch):
-    monkeypatch.setattr(llm, "chat", scripted(calls("get_build", week=4),
-                                              answer("It ingests PDFs into Qdrant.")))
-    body = _ask("What did you build in Week 4?").json()
-    assert body["grounded"] is False and body["citations"] == []
-
-
-def test_a_source_from_a_failed_call_cannot_be_cited(monkeypatch):
-    monkeypatch.setattr(llm, "chat", scripted(calls("get_build", week=99),
-                                              answer("Week 99 was great [AGENTS.md · W99].")))
-    body = _ask("What did you build in Week 99?").json()
-    assert body["unverified_citations"] == ["AGENTS.md · W99"] and body["grounded"] is False
+@pytest.mark.parametrize("week,text,cited,unverified", [
+    (4, "It scored 99% [eval_results.json · W4] and ingests PDFs [AGENTS.md · W4].",
+     ["AGENTS.md · W4"], ["eval_results.json · W4"]),    # one fake source spoils the answer
+    (4, "It ingests PDFs into Qdrant.", [], []),           # no citation at all
+    (99, "Week 99 was great [AGENTS.md · W99].", [], ["AGENTS.md · W99"]),   # a failed call
+], ids=["invented_source", "no_citation", "source_of_a_failed_call"])
+def test_grounding_verdict(monkeypatch, week, text, cited, unverified):
+    monkeypatch.setattr(llm, "chat", scripted(calls("get_build", week=week), answer(text)))
+    body = _ask(f"What did you build in Week {week}?").json()
+    assert body["citations"] == cited and body["unverified_citations"] == unverified
+    assert body["grounded"] is False
 
 
 # ---------- the short history ----------
@@ -237,18 +218,13 @@ def test_the_cost_is_the_sum_of_every_call(monkeypatch):
 
 # ---------- the mutating tool: validated, then gated ----------
 
-def test_a_bad_reason_creates_nothing():
+@pytest.mark.parametrize("extra", [{"reason": "urgent"}, {"approved": True}],
+                         ids=["bad_reason", "extra_argument"])
+def test_request_intro_validates_before_side_effects(extra):
     env = tools.execute_tool("request_intro", {"name": "Jane", "contact": "j@x.io",
-                                               "reason": "urgent", "message": "hi"})
-    assert env.success is False and "reason" in env.error
+                                               "reason": "hiring", "message": "hi", **extra})
+    assert env.success is False and env.error
     assert tools.pending_actions() == []                   # validated BEFORE any side effect
-
-
-def test_extra_arguments_are_refused():
-    env = tools.execute_tool("request_intro", {"name": "Jane", "contact": "j@x.io",
-                                               "reason": "hiring", "message": "hi",
-                                               "approved": True})
-    assert env.success is False and tools.pending_actions() == []
 
 
 def test_the_model_cannot_approve_its_own_request(monkeypatch):
@@ -260,6 +236,23 @@ def test_the_model_cannot_approve_its_own_request(monkeypatch):
     body = _ask("Please have the student contact me at j@x.io, I'm hiring").json()
     assert body["pending_action"]["status"] == "input-required"
     assert tools.pending_actions()[0].result is None
+
+
+def test_one_question_creates_at_most_one_intro(monkeypatch):
+    many = [("request_intro", dict(INTRO)) for _ in range(15)]
+    monkeypatch.setattr(llm, "chat", scripted(calls(*many), answer("Waiting for the student.")))
+    body = _ask("Please have the student contact me", user_id="spam").json()
+    assert len(tools.pending_actions()) == 1
+    assert [s["success"] for s in body["tools_called"]] == [True] + [False] * 14
+    assert sum(e.kind == "intro:proposed" for e in memory.audit_log("spam")) == 1
+
+
+def test_an_intro_is_audited_even_if_a_cap_stops_the_request(monkeypatch):
+    monkeypatch.setattr(llm, "chat", scripted(calls("request_intro", ptok=70_000, **INTRO),
+                                              answer("never reached")))
+    r = _ask("Why not ask the student to contact me?", user_id="late")
+    assert r.status_code == 413                                  # the ceiling stopped call 2
+    assert [e.kind for e in memory.audit_log("late")] == ["intro:proposed"]
 
 
 # ---------- what the agent retrieved, shown back ----------
@@ -277,19 +270,6 @@ def test_each_step_carries_the_text_it_pulled(monkeypatch):
 
 
 def test_a_long_result_is_cut_for_the_trace():
-    from app.schemas import ToolEnvelope
     env = ToolEnvelope(success=True, tool="get_architecture", source="s",
                        data={"title": "T", "text": "x" * 9000})
     assert len(tools.excerpt(env)) == tools.EXCERPT_MAX + 2 and tools.excerpt(env).endswith("…")
-
-
-def test_the_ui_shows_the_retrieved_context_escaped():
-    from pathlib import Path
-    page = (Path(__file__).resolve().parent.parent / "index.html").read_text(encoding="utf-8")
-    ctx = page[page.index("function renderContext"):page.index("function fmtCited")]
-    assert "escHtml(s.content" in ctx and "<details" in ctx         # pulled text, escaped
-    assert "cited in the answer" in ctx and "retrieved, not cited" in ctx
-    cited = page[page.index("function fmtCited"):page.index("function bindCitations")]
-    assert cited.startswith("function fmtCited(text, d){") and "fmtAnswer(text)" in cited
-    assert "onclick" not in page[page.index("function renderContext"):
-                                 page.index("// ── Approval gate")]  # bound in code

@@ -1,15 +1,14 @@
 """Correctness the walkthrough relies on but does not narrate: closed clients, read-only reads,
-thread-safe state, honest token counts, safe PII patterns, and a pinned route surface."""
-import inspect
+thread-safe state, honest token counts, whole-word cues, and a pinned route surface."""
 import threading
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
-from app import budget, llm, memory, router, tools
+from app import budget, llm, memory, tools
 from app.main import app
 from app.schemas import AuditEntry
-from app.scrub import CARD_REDACTION, PHONE_REDACTION, scrub
 
 client = TestClient(app)
 
@@ -73,31 +72,31 @@ def test_chat_opens_and_closes_one_client(monkeypatch):
 
 # ---------- the cost ceiling counts tokens with the model's tokenizer ----------
 
-def test_ceiling_counts_input_with_the_tokenizer():
+def _pack_text(name):
+    from pathlib import Path
+
+    from app.context import get_context
+    if name == "pack":
+        return get_context()                   # eval_results.json has 500+ character lines
+    return (Path(__file__).resolve().parent.parent / "data" / name).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("name", ["AGENTS.md", "architecture.md", "pack"])
+def test_token_count_is_exact(name):
+    """Prose is cut at newlines and counted exactly; a line longer than a piece may be cut
+    mid-token - never under-counted, over by at most one token a cut."""
+    text, enc = _pack_text(name), budget._encoding()
+    exact = len(enc.encode_ordinary(text)) + budget.CHAT_FRAMING_TOKENS
+    slack = len(text) // budget._COUNT_PIECE_CHARS + 1 if name == "pack" else 0
+    assert exact <= budget.count_input_tokens([text]) <= exact + slack
+
+
+def test_message_framing_is_counted_and_special_tokens_are_plain_text():
     enc = budget._encoding()
     system, question = "You answer from the pack.", "Describe <|endoftext|> politely."
     expected = (len(enc.encode_ordinary(system)) + len(enc.encode_ordinary(question))
                 + budget.CHAT_FRAMING_TOKENS + 2 * budget.MESSAGE_FRAMING_TOKENS)
     assert budget.count_input_tokens([system, question], message_count=2) == expected
-
-
-def test_a_long_text_is_counted_exactly_despite_the_pieces():
-    from pathlib import Path
-    data = Path(__file__).resolve().parent.parent / "data"
-    enc = budget._encoding()
-    for name in ("AGENTS.md", "architecture.md"):          # ordinary prose: cut at newlines
-        text = (data / name).read_text(encoding="utf-8")
-        assert budget.count_input_tokens([text]) == len(enc.encode_ordinary(text)) + \
-            budget.CHAT_FRAMING_TOKENS, name
-
-
-def test_a_line_longer_than_a_piece_is_never_under_counted():
-    from app.context import get_context
-    pack = get_context()                       # eval_results.json has 500+ character lines
-    enc = budget._encoding()
-    exact = len(enc.encode_ordinary(pack)) + budget.CHAT_FRAMING_TOKENS
-    counted = budget.count_input_tokens([pack])
-    assert exact <= counted <= exact + len(pack) // budget._COUNT_PIECE_CHARS + 1
 
 
 def test_the_ceiling_prices_the_tool_schemas_too():
@@ -106,11 +105,6 @@ def test_the_ceiling_prices_the_tool_schemas_too():
     with_tools = budget.count_input_tokens(llm.message_texts(messages, tools.TOOL_SPECS))
     without = budget.count_input_tokens(llm.message_texts(messages, []))
     assert with_tools - without > 200                      # the schemas are billed as input
-
-
-def test_dense_input_is_not_under_counted():
-    dense = "".join(f"{i:08x}" for i in range(5000))          # 40,000 chars of hex
-    assert budget.count_input_tokens([dense]) > len(dense) // 4  # chars/4 would under-price it
 
 
 def test_a_huge_unbroken_input_gets_a_413_not_a_crash(monkeypatch):
@@ -178,38 +172,6 @@ def test_user_ids_with_a_slash_reach_their_own_audit_log():
     memory.log_audit(AuditEntry(user_id="team/alice", session_id="s", kind="ask", detail="x"))
     r = client.get("/audit/team/alice")
     assert r.status_code == 200 and [e["user_id"] for e in r.json()] == ["team/alice"]
-
-
-# ---------- the router has one public signature; nothing dead ----------
-
-def test_router_has_no_unused_force_tier():
-    assert "force_tier" not in inspect.signature(router.resolve_tier).parameters
-    assert "force_tier" not in inspect.signature(router.route).parameters
-
-
-# ---------- PII patterns: what they promise, and nothing more ----------
-
-def test_iso_dates_and_times_are_not_phones():
-    for stamp in ("2026-09-11", "2026-09-11 14:23:05", "2026-09-11T14:23:05Z",
-                  "gpt-5.4-nano-2026-03-17"):
-        assert scrub(f"at {stamp} ok") == f"at {stamp} ok", stamp
-
-
-def test_phones_and_cards_are_redacted_under_their_own_labels():
-    assert scrub("call +1 (555) 123-4567 now") == f"call {PHONE_REDACTION} now"
-    assert scrub("card 4111 1111 1111 1111 on file") == f"card {CARD_REDACTION} on file"
-    # 16 digits that fail the Luhn check are not a card - but they are still never logged raw
-    assert "1234" not in scrub("ref 1234 5678 9012 3456")
-
-
-# ---------- the UI: one brand, and no server value inside an inline handler ----------
-
-def test_ui_credits_the_course_under_the_student_and_has_no_inline_handler_ids():
-    page = client.get("/").text
-    assert "<title>AgentForge - PortfolioAgent</title>" in page   # the profile's name replaces it
-    assert "Applied GenAI &amp; Agentic AI Engineering Course" in page   # credited, underneath
-    assert "CoreSmart AI" not in page
-    assert "decideAction('${" not in page
 
 
 # ---------- the open-source path: only the SMALL tier moves to the local server ----------

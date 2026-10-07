@@ -3,6 +3,7 @@
 Offline like the rest of the suite - the model is scripted at `app.llm.chat`.
 """
 import logging
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -73,11 +74,16 @@ def test_a2a_bad_send_message_is_a_jsonrpc_error(params, code):
     assert _rpc("SendMessage", params)["error"]["code"] == code
 
 
-def test_a2a_malformed_requests():
-    r = client.post("/a2a", content=b"{not json", headers={"Content-Type": "application/json"})
-    assert r.json()["error"]["code"] == -32700                          # parse error
-    assert client.post("/a2a", json={"method": "SendMessage"}).json()["error"]["code"] == -32600
-    assert _rpc("NoSuchMethod")["error"]["code"] == -32601
+@pytest.mark.parametrize("raw, code", [
+    (b"{not json", -32700),                                          # parse error
+    (b"[" * 100_000, -32700),                                        # nested past the limit
+    (b'{"method": "SendMessage"}', -32600),                          # not JSON-RPC 2.0
+    (b'{"jsonrpc": "2.0", "id": 1, "method": "NoSuchMethod"}', -32601),
+], ids=["not_json", "deeply_nested", "no_jsonrpc_field", "unknown_method"])
+def test_a2a_transport_errors(raw, code):
+    r = client.post("/a2a", content=raw, headers={"Content-Type": "application/json",
+                                                  "A2A-Version": "1.0"})
+    assert r.status_code == 200 and r.json()["error"]["code"] == code
 
 
 @pytest.mark.parametrize("method, code", [
@@ -95,12 +101,14 @@ def test_a2a_list_tasks_is_an_empty_page():
     assert page == {"tasks": [], "totalSize": 0, "pageSize": 10, "nextPageToken": ""}
 
 
-def test_a2a_refuses_an_explicit_other_version(monkeypatch):
-    monkeypatch.setattr(llm, "chat", _stub())
-    old = _rpc("SendMessage", _send("What is the cost ceiling?"), headers={"A2A-Version": "0.3"})
-    assert old["error"]["code"] == -32009
-    ok = _rpc("SendMessage", _send("What is the cost ceiling?"), headers={"A2A-Version": "1.0"})
-    assert "result" in ok
+def test_a2a_send_message_that_proposes_an_intro_returns_its_id(monkeypatch):
+    monkeypatch.setattr(llm, "chat", scripted(
+        calls("request_intro", name="Jane", contact="j@x.io", reason="hiring", message="hi"),
+        answer("Your request is waiting for the student's approval.")))
+    msg = _rpc("SendMessage", _send("Please have the student contact me at j@x.io"))
+    action_id = msg["result"]["message"]["metadata"]["pendingActionId"]
+    assert action_id and client.get("/actions").json()[0]["id"] == action_id
+    assert client.get("/actions").json()[0]["status"] == "input-required"
 
 
 def test_a2a_maps_the_ask_guards(monkeypatch):
@@ -138,6 +146,32 @@ def test_admin_token_guards_the_gate_and_private_state(monkeypatch):
     good = {"Authorization": "Bearer s3cret-token"}
     executed = client.post("/approve", json=decision, headers=good)
     assert executed.status_code == 200 and executed.json()["status"] == "executed"
+
+
+def _admin_routes():
+    from app.guard import require_admin
+    return {(m, r.path) for r in app.routes if hasattr(r, "dependant")
+            for d in r.dependant.dependencies if d.call is require_admin for m in r.methods}
+
+
+def test_every_owner_route_needs_the_token(monkeypatch):
+    assert _admin_routes() == {("GET", "/actions"), ("POST", "/approve"),
+                               ("GET", "/audit/{user_id:path}"), ("POST", "/memory"),
+                               ("GET", "/memory"), ("DELETE", "/memory")}
+    _settings(monkeypatch, ADMIN_TOKEN="s3cret-token")
+    bodies = {"/approve": {"action_id": "a", "approve": True},
+              "/memory": {"key": "k", "value": "v"}}
+    for method, path in sorted(_admin_routes()):
+        url = path.replace("{user_id:path}", "anon")
+        kwargs = {"params": {"key": "k"}} if method == "GET" else {"json": bodies.get(path)}
+        assert client.request(method, url, **kwargs).status_code == 401, (method, path)
+
+
+def test_a_non_ascii_token_is_a_401_not_a_500(monkeypatch):
+    _settings(monkeypatch, ADMIN_TOKEN="tok")
+    raw = TestClient(app, raise_server_exceptions=False)
+    r = raw.get("/actions", headers={"Authorization": "Bearer café".encode("latin-1")})
+    assert r.status_code == 401
 
 
 def test_render_refuses_to_boot_without_an_admin_token(monkeypatch):
@@ -185,6 +219,29 @@ def test_daily_budget_stops_model_spend(monkeypatch):
     assert refused.json()["detail"]["error"] == "daily_budget_exhausted"
     over_a2a = _rpc("SendMessage", _send("What is the cost ceiling?"))["error"]
     assert over_a2a["data"][0]["reason"] == "DAILY_BUDGET_EXHAUSTED"   # no side door
+
+
+def test_the_rate_limit_window_slides_after_a_minute(monkeypatch):
+    _settings(monkeypatch, RATE_LIMIT_PER_MINUTE="1")
+    clock = [1000.0]
+    monkeypatch.setattr(guard, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    assert client.post("/a2a", json=CHEAP).status_code == 200
+    clock[0] += 59
+    assert client.post("/a2a", json=CHEAP).status_code == 429       # still inside the minute
+    clock[0] += 1
+    assert client.post("/a2a", json=CHEAP).status_code == 200       # the first hit has aged out
+
+
+def test_the_daily_budget_rolls_over_at_midnight_utc(monkeypatch):
+    _settings(monkeypatch, DAILY_BUDGET_USD="0.0005")
+    monkeypatch.setattr(llm, "chat", scripted(answer(ANSWER, 1200, 120)))
+    day = ["2026-10-07"]
+    monkeypatch.setattr(guard, "_today", lambda: day[0])
+    q = {"question": "What is the cost ceiling?"}
+    assert [client.post("/ask", json=q).status_code for _ in range(3)] == [200, 200, 429]
+    day[0] = "2026-10-08"
+    assert guard.spent_today() == 0.0
+    assert client.post("/ask", json=q).status_code == 200
 
 
 # ---------- Startup wiring and the access log (the side channel a public URL adds) ----------

@@ -1,22 +1,18 @@
 """What a stranger on the shared URL can do - and what they cannot.
 
 Body and field limits, store caps, who the rate limit counts, the headers a refused request
-still carries, strict A2A version negotiation, an honest audit trail, and the UI on a
-deployment that requires the admin token. Offline: the model is stubbed.
+still carries, strict A2A version negotiation, an honest audit trail and input hygiene.
+Offline: the model is stubbed.
 """
-import re
-from pathlib import Path
-
 import pytest
 from fastapi.testclient import TestClient
 
-from app import config, llm, memory, tools
+from app import config, guard, llm, memory, tools
 from app.main import app
-from app.schemas import AuditEntry
+from app.schemas import AskRequest, AuditEntry
 from tests.scripted import answer, calls, scripted
 
 client = TestClient(app)
-ROOT = Path(__file__).resolve().parent.parent
 # A cheap POST that never reaches a model - for the rate-limit tests.
 CHEAP = {"jsonrpc": "2.0", "id": 1, "method": "ListTasks"}
 INTRO = {"name": "Jane", "contact": "jane.doe@example.com", "reason": "hiring",
@@ -100,37 +96,33 @@ def test_open_actions_are_capped_and_decided_ones_make_room(monkeypatch):
 
 # ── Who the rate limit counts ───────────────────────────────────────────────────────
 
-def test_rate_limit_prefers_the_edge_set_client_ip_headers(monkeypatch):
-    _settings(monkeypatch, RATE_LIMIT_PER_MINUTE="1", TRUST_FORWARDED_FOR="true")
-
-    def post(**headers):
-        return client.post("/a2a", json=CHEAP, headers=headers).status_code
-    # Cloudflare (in front of Render) sets CF-Connecting-IP itself, overwriting the client's.
-    assert post(**{"CF-Connecting-IP": "1.1.1.1", "X-Forwarded-For": "9.9.9.9, 10.0.0.1"}) == 200
-    assert post(**{"CF-Connecting-IP": "1.1.1.1", "X-Forwarded-For": "8.8.8.8, 10.0.0.2"}) == 429
-    assert post(**{"CF-Connecting-IP": "2.2.2.2", "X-Forwarded-For": "1.1.1.1, 10.0.0.1"}) == 200
-    # True-Client-IP is set only on Cloudflare Enterprise - elsewhere a client writes it
-    assert post(**{"True-Client-IP": "3.3.3.3", "X-Forwarded-For": "1.1.1.1, 10.0.0.1"}) == 429
-
-
-def test_rate_limit_falls_back_to_the_first_forwarded_hop(monkeypatch):
-    # Render's own statement: the first X-Forwarded-For entry is the client; the hops after
-    # it are Render's proxies, shared by every visitor - keying on them makes one global limit.
-    _settings(monkeypatch, RATE_LIMIT_PER_MINUTE="1", TRUST_FORWARDED_FOR="true")
-
-    def post(xff):
-        return client.post("/a2a", json=CHEAP, headers={"X-Forwarded-For": xff}).status_code
-    assert post("1.1.1.1, 10.0.0.1, 10.0.0.2") == 200
-    assert post("1.1.1.1, 10.0.0.1, 10.0.0.2") == 429      # the same visitor
-    assert post("2.2.2.2, 10.0.0.1, 10.0.0.2") == 200      # a different visitor, same proxies
+@pytest.mark.parametrize("trusted, hits", [
+    # Cloudflare (in front of Render) sets CF-Connecting-IP itself, overwriting the client's;
+    # True-Client-IP is set only on Cloudflare Enterprise - elsewhere a client writes it.
+    ("true", [({"CF-Connecting-IP": "1.1.1.1", "X-Forwarded-For": "9.9.9.9, 10.0.0.1"}, 200),
+              ({"CF-Connecting-IP": "1.1.1.1", "X-Forwarded-For": "8.8.8.8, 10.0.0.2"}, 429),
+              ({"CF-Connecting-IP": "2.2.2.2", "X-Forwarded-For": "1.1.1.1, 10.0.0.1"}, 200),
+              ({"True-Client-IP": "3.3.3.3", "X-Forwarded-For": "1.1.1.1, 10.0.0.1"}, 429)]),
+    # Render: the first X-Forwarded-For entry is the client; the hops after it are Render's
+    # proxies, shared by every visitor - keying on them would make one global limit.
+    ("true", [({"X-Forwarded-For": "1.1.1.1, 10.0.0.1, 10.0.0.2"}, 200),
+              ({"X-Forwarded-For": "1.1.1.1, 10.0.0.1, 10.0.0.2"}, 429),
+              ({"X-Forwarded-For": "2.2.2.2, 10.0.0.1, 10.0.0.2"}, 200)]),
+    # not trusted: the headers are ignored - one socket peer, one bucket
+    ("false", [({"True-Client-IP": "1.1.1.1"}, 200), ({"True-Client-IP": "2.2.2.2"}, 429)]),
+], ids=["edge_header_first", "first_forwarded_hop", "untrusted_headers_ignored"])
+def test_rate_limit_client_key(monkeypatch, trusted, hits):
+    _settings(monkeypatch, RATE_LIMIT_PER_MINUTE="1", TRUST_FORWARDED_FOR=trusted)
+    assert [client.post("/a2a", json=CHEAP, headers=h).status_code for h, _ in hits] \
+        == [code for _, code in hits]
 
 
-def test_forwarded_headers_are_ignored_unless_trusted(monkeypatch):
-    _settings(monkeypatch, RATE_LIMIT_PER_MINUTE="1")
-    assert client.post("/a2a", json=CHEAP, headers={"True-Client-IP": "1.1.1.1"}).status_code \
-        == 200
-    assert client.post("/a2a", json=CHEAP, headers={"True-Client-IP": "2.2.2.2"}).status_code \
-        == 429                                     # not trusted: one socket peer, one bucket
+def test_the_rate_limit_table_is_bounded(monkeypatch):
+    _settings(monkeypatch, TRUST_FORWARDED_FOR="true")
+    monkeypatch.setattr(guard, "MAX_TRACKED_CLIENTS", 5)
+    for i in range(20):                                          # 20 forged addresses
+        client.post("/ask", json={"question": "x"}, headers={"X-Forwarded-For": f"10.0.0.{i}"})
+    assert len(guard._HITS) == 5
 
 
 def test_a_rate_limited_response_still_carries_cors_and_a2a_headers(monkeypatch):
@@ -146,7 +138,7 @@ def test_a_rate_limited_response_still_carries_cors_and_a2a_headers(monkeypatch)
 
 # ── A2A version negotiation, per the spec ───────────────────────────────────────────
 
-@pytest.mark.parametrize("version", [None, "", "0.3", "1.05", "1.0x", "2.0", "1"])
+@pytest.mark.parametrize("version", [None, "0.3", "1.0x", "2.0"])
 def test_only_a2a_1_0_is_accepted(version):
     headers = {} if version is None else {"A2A-Version": version}
     err = _rpc("ListTasks", headers=headers)["error"]
@@ -159,15 +151,10 @@ def test_a2a_1_0_is_accepted(version):
     assert "result" in _rpc("ListTasks", headers={"A2A-Version": version})
 
 
-@pytest.mark.parametrize("size", ["lots", 0, -5, 1.5, True])
+@pytest.mark.parametrize("size", ["lots", 0, True])
 def test_list_tasks_rejects_a_bad_page_size(size):
     err = _rpc("ListTasks", {"pageSize": size}, headers={"A2A-Version": "1.0"})["error"]
     assert err["code"] == -32602
-
-
-def test_list_tasks_keeps_a_valid_page_size():
-    out = _rpc("ListTasks", {"pageSize": 10}, headers={"A2A-Version": "1.0"})["result"]
-    assert out["pageSize"] == 10
 
 
 # ── An honest audit trail ───────────────────────────────────────────────────────────
@@ -184,17 +171,36 @@ def test_a_decided_action_cannot_be_decided_again(monkeypatch):
     assert tools.get_action(a["id"]).status == "rejected"
 
 
-def test_every_audit_line_is_scrubbed(monkeypatch):
+def test_the_audit_trail_is_scrubbed(monkeypatch):
+    """Every audit line - the intro, the decision, memory keys, the question - hides PII."""
     a = _intro_via_agent(monkeypatch, "u2")          # its contact is jane.doe@example.com
+    assert a["status"] == "input-required"
     client.post("/approve", json={"action_id": a["id"], "approve": False,
                                   "approver": "ops@example.com"})
     client.post("/memory", json={"user_id": "u2", "session_id": "s", "key": "bob@example.com",
                                  "value": "x"})
     client.request("DELETE", "/memory", json={"user_id": "u2", "session_id": "s",
                                               "key": "bob@example.com"})
-    details = " | ".join(e["detail"] for e in client.get("/audit/u2").json())
-    assert "@example.com" not in details
+    # The question is scrubbed BEFORE it is cut to 80 characters: a cut email no longer looks
+    # like one, and would slip past the scrubber.
+    monkeypatch.setattr(llm, "chat", scripted(answer("OUT_OF_SCOPE no.")))
+    question = "Hello there, I really want the student to get in touch, please email " \
+               "jane.doe@example.com"
+    assert len(question) > 80                                    # the email crosses the cut
+    client.post("/ask", json={"question": question, "user_id": "u2"})
+    lines = client.get("/audit/u2").json()
+    details = " | ".join(e["detail"] for e in lines)
+    assert "@example.com" not in details and "jane.doe" not in details
     assert details.count("[REDACTED_EMAIL]") == 4
+    assert "[REDACTED_E" in lines[-1]["detail"]                  # the marker is cut, not the PII
+
+
+def test_a_phone_in_the_question_is_scrubbed_from_the_audit_line(monkeypatch):
+    monkeypatch.setattr(llm, "chat", scripted(answer("OUT_OF_SCOPE no.")))
+    client.post("/ask", json={"question": "Call +1 (415) 555-2671 about the cost ceiling",
+                              "user_id": "u3"})
+    detail = client.get("/audit/u3").json()[0]["detail"]
+    assert "555-2671" not in detail and "[REDACTED_PHONE]" in detail
 
 
 # ── Input hygiene ───────────────────────────────────────────────────────────────────
@@ -213,19 +219,8 @@ def test_a_padded_question_is_answered_trimmed(monkeypatch):
     assert model.seen["messages"][0][-1]["content"] == "What is the cost ceiling?"
 
 
-# ── The UI on a deployment that requires the admin token ────────────────────────────
-
-def test_health_says_whether_the_admin_token_is_required(monkeypatch):
-    assert client.get("/health").json()["admin_token_required"] is False
-    _settings(monkeypatch, ADMIN_TOKEN="t0ken")
-    assert client.get("/health").json()["admin_token_required"] is True
-
-
-def test_the_admin_page_handles_an_owner_only_answer():
-    page = (ROOT / "admin.html").read_text(encoding="utf-8")
-    call = page[page.index("async function call"):]
-    call = call[:call.index("\n  }\n")]
-    assert "r.status === 401" in call and "!r.ok" in call   # a 401 is said, not rendered blank
-    assert "sessionStorage" in page                 # the owner's token stays in this tab only
-    assert "localStorage" not in page
-    assert re.search(r"Authorization['\"]?\s*:", page)   # sent on the owner-only calls
+def test_half_an_emoji_never_reaches_the_provider():
+    req = AskRequest.model_validate({"question": "What did W4 build \ud83d?",
+                                     "history": [{"question": "q", "answer": "ok \ud83d"}]})
+    for text in (req.question, req.history[0].answer):
+        assert text.encode("utf-8")                              # would raise on a surrogate

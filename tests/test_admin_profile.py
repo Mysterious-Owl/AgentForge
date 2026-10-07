@@ -1,9 +1,8 @@
-"""The signed Agent Card, the owner's /admin page, and the student's profile.
+"""The signed Agent Card and the student's profile.
 
 Offline: no model is called; the signing key is derived from a test seed.
 """
 import json
-import re
 from pathlib import Path
 
 import pytest
@@ -63,29 +62,12 @@ def test_the_legacy_alias_serves_the_same_signed_bytes(monkeypatch):
         client.get("/.well-known/agent-card.json").content
 
 
-def test_the_ui_verifies_the_signature_in_the_browser():
-    page = (ROOT / "index.html").read_text(encoding="utf-8")
-    verify = page[page.index("async function verifyCard"):]
-    assert "crypto.subtle.verify" in verify and "P-256" in verify
-    assert "new URL(header.jku).pathname" in verify          # the key the header names
-
-
-# ---------- the owner's page ----------
-
-def test_the_admin_page_holds_the_owner_tools_and_the_public_page_does_not():
-    admin = client.get("/admin")
-    assert admin.status_code == 200 and "text/html" in admin.headers["content-type"]
-    for needle in ('id="owner-token"', "'/actions'", "'/approve'", "/audit/"):
-        assert needle in admin.text, needle
-    public = client.get("/").text
-    assert 'id="owner-token"' not in public and "/actions" not in public
-    assert 'href="/admin"' in public and 'data-decide' not in public
-
-
-def test_the_admin_page_is_harmless_without_the_token(monkeypatch):
-    _settings(monkeypatch, ADMIN_TOKEN="t0ken")
-    assert client.get("/admin").status_code == 200           # the page is just a token box
-    assert client.get("/actions").status_code == 401         # its data still needs the token
+def test_verify_card_says_false_to_a_hostile_card(monkeypatch):
+    _settings(monkeypatch, CARD_SIGNING_SEED="seed")
+    keys = client.get("/.well-known/jwks.json").json()
+    for bad in ({"signatures": "x"},
+                {"signatures": [{"protected": signing.b64url(b"[1]"), "signature": "AA"}]}):
+        assert signing.verify_card(bad, keys) is False
 
 
 # ---------- the student's profile ----------
@@ -116,19 +98,11 @@ def test_only_http_links_reach_the_page(tmp_path, monkeypatch):
                        "resume": "HTTPS://x.io/cv.pdf"}
 
 
-@pytest.mark.parametrize("text,status", [(None, 200), ("{not json", 503)])
+@pytest.mark.parametrize("text,status", [(None, 200), ("{not json", 503), ("[]", 503)],
+                         ids=["missing", "not_json", "not_an_object"])
 def test_the_profile_is_optional_but_must_be_valid(tmp_path, monkeypatch, text, status):
     _pack_with_profile(tmp_path, monkeypatch, text)
     r = client.get("/portfolio")
     assert r.status_code == status
     if status == 200:
         assert r.json()["profile"] == {}
-
-
-def test_the_header_sets_the_name_as_text_never_as_html():
-    page = (ROOT / "index.html").read_text(encoding="utf-8")
-    render = page[page.index("function renderProfile"):page.index("function aboutLine")]
-    assert "textContent = `${p.name} · AgentForge`" in render and "innerHTML" not in render
-    about = page[page.index("function aboutLine"):page.index("function renderBuilds")]
-    assert "escHtml(p.name)" in about and "escHtml(p[k])" in about
-    assert re.search(r"rel=\"noopener\"", about)
