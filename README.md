@@ -40,7 +40,7 @@ signature, that the agent they reached is yours. Your name, headline and links h
 /
 ├── app/
 │   ├── __init__.py
-│   ├── config.py        <- typed settings: the two tier pins + their prices, the caps, the deploy guards, SMALL_BASE_URL; refuses to boot on Render without ADMIN_TOKEN
+│   ├── config.py        <- typed settings: the two tier pins + their prices, the caps, the deploy guards, SMALL_BASE_URL, CARD_SIGNING_SEED; refuses to boot on Render without ADMIN_TOKEN
 │   ├── schemas.py       <- Pydantic contracts: Ask request/response (+ history), ModelTurn, ToolEnvelope, ToolStep, IntroRequest (the reason enum), PendingAction, the A2A 1.0 card
 │   ├── classifier.py    <- deterministic question classifier (length + whole-word reasoning cues) - the routing key
 │   ├── router.py        <- classify → route-up safety valve → tier + model → the agent loop on that model → price + frontier counterfactual
@@ -84,7 +84,7 @@ signature, that the agent they reached is yours. Your name, headline and links h
 ├── week17_notebook.ipynb <- curl + Python-requests walkthrough of the routes, the A2A methods and the failure modes
 ├── requirements.txt     <- pinned versions - the stack the tests run on
 ├── pytest.ini           <- warnings stay on; the pytest-asyncio loop scope; one known starlette notice filtered
-├── render.yaml          <- Render Blueprint: one free web service, one worker, ADMIN_TOKEN generated
+├── render.yaml          <- Render Blueprint: one free web service, one worker, ADMIN_TOKEN and CARD_SIGNING_SEED generated
 ├── .python-version      <- Python 3.12 for Render (its default is newer than this stack is tested on)
 ├── .env.example         <- copy this to .env and fill in your own key; never commit the .env you make
 ├── .gitignore           <- ignores .env, the venv and caches
@@ -92,9 +92,11 @@ signature, that the agent they reached is yours. Your name, headline and links h
 └── README.md            <- you are here
 ```
 
-Every file in `data/` is used. The first three and `weeks/` are **the pack** - the tools read them, the
-build cards are parsed from them, and the startup check refuses to boot without them. The two
-golden sets feed the two eval gates; the tokenizer vocabulary feeds the cost ceiling.
+Every file in `data/` is used. `AGENTS.md`, `architecture.md` and `eval_results.json` are **the
+pack**: the tools read them, the build cards are parsed from them, and the server refuses to boot
+without them. `weeks/` (the week files) and `profile.json` (the header) are optional extras the
+tools and the page read when present. The two golden sets feed the two eval gates; the tokenizer
+vocabulary feeds the cost ceiling.
 
 ---
 
@@ -102,7 +104,8 @@ golden sets feed the two eval gates; the tokenizer vocabulary feeds the cost cei
 
 You give it three files describing your capstone (`data/AGENTS.md`, `data/architecture.md` -
 the written summary **plus text versions of the architecture diagrams** - and
-`data/eval_results.json`). A visitor can:
+`data/eval_results.json`), optionally a file per week (`data/weeks/`) and your profile
+(`data/profile.json`). A visitor can:
 
 - **Scroll your builds.** The page opens on one card per week, and each opens a read page
   with that week's results, the decisions that cite it and its lines in the diagrams.
@@ -128,8 +131,8 @@ the written summary **plus text versions of the architecture diagrams** - and
 > the $0.05 per-request ceiling - `app/budget.py` refuses any call that would push a request
 > over it (413), and `GET /health` reports it.
 
-It does **not** send real emails (an approved intro is simulated), keep state across a
-restart, or sign its Agent Card - see
+It does **not** send real emails (an approved intro is simulated) or keep state across a
+restart - see
 [Deliberate simplifications](#10-deliberate-simplifications---read-this-before-you-copy-it-into-production).
 
 ---
@@ -170,23 +173,25 @@ local qwen3:0.6b 66.7%. The routing gate cannot tell you this - it never calls a
 ## 3. File-by-file walkthrough
 
 Read in this order: config → schemas → classifier → router → agent → budget → llm → tools →
-portfolio → context → memory → scrub → guard → a2a → main.
+portfolio → context → memory → scrub → guard → a2a → signing → main.
 
 ### `app/config.py` - Settings
 One typed `Settings` class (pydantic-settings) reads `.env` once. It pins both tiers by dated id
 (never `-latest`) and holds their prices, so the eval gates, the cost ceiling and `/health` all
 price from one table. It also holds the caps (`max_iterations=8`, `cost_ceiling_usd=0.05`), the
 classifier thresholds, the model timeout (30 s), the deploy guards (including the 2 MiB body
-limit) and `SMALL_BASE_URL` for the open-source path. `AGENT_BASE_URL` falls back to Render's
-`RENDER_EXTERNAL_URL`, so the Agent Card advertises the right URL with no config. A validator
-refuses to boot on Render (`RENDER=true`) without `ADMIN_TOKEN`.
+limit), `SMALL_BASE_URL` for the open-source path and `CARD_SIGNING_SEED` for the card's
+signature. `AGENT_BASE_URL` falls back to Render's `RENDER_EXTERNAL_URL`, so the Agent Card
+advertises the right URL with no config. A validator refuses to boot on Render (`RENDER=true`)
+without `ADMIN_TOKEN`.
 
 ### `app/schemas.py` - Contracts
 `AskRequest.question` has `min_length=8`, counted after surrounding whitespace is stripped.
 `AskRequest.history` takes at most 3 earlier turns, each side capped at 2,000 characters.
 `ModelTurn` is one model call - text, or the tool calls it chose - plus its token usage.
 `ToolEnvelope` is every tool's result, with the `source` an answer may cite; `ToolStep` is one
-line of the trace, with the text that call pulled (`content`, at most 4,000 characters). `IntroRequest` validates `request_intro`'s arguments, with `reason` a
+line of the trace, with the text that call pulled (`content`, at most 4,000 characters).
+`IntroRequest` validates `request_intro`'s arguments, with `reason` a
 `Literal["hiring","collaboration","feedback","other"]` and no extra fields; `PendingAction` is
 the gate's paused state. `AskResponse` carries the trace, the verified and the unverified
 citations, the pending action, and the call count. The Agent Card models follow A2A 1.0.
@@ -239,8 +244,9 @@ summary), `get_week_details` → `[weeks/w04.md]` (the week in depth), `get_eval
 `[eval_results.json · W4]`, and `get_architecture` with a `section` → e.g.
 `[architecture.md · decisions]` (overview, rules, portfolio_agent, spine, decisions,
 diagram_1-4, numbers) or with a `week` → `[architecture.md · W4]`: just the decisions and
-diagram lines tagged with that week. Exactly one of `section` or `week`, else an envelope. `request_intro` validates `IntroRequest` first, then writes an
-`input-required` action and does nothing else; `decide()` approves or rejects it under a lock,
+diagram lines tagged with that week. Exactly one of `section` or `week`, else an envelope.
+`request_intro` validates `IntroRequest` first, then writes an `input-required` action and does
+nothing else; `decide()` approves or rejects it under a lock,
 so two simultaneous approvals execute it once, and deciding it again raises `AlreadyDecided`
 (→ 409). The store holds at most 1,000 actions; when every one is open, the model is told so.
 
@@ -250,7 +256,8 @@ after the name is skipped), the named sections `get_architecture` serves, one we
 the architecture (the decisions and diagram lines whose `(Wn)` tags include it), a week's
 entries in `eval_results.json` (keys `w05_...`; Week 17 adds this agent's two gates), the week
 files in `data/weeks/`, the read page for `GET /portfolio/{week}` (with an **In depth** section
-when the week has a file; every pack string HTML-escaped), and the two gates' pass rates. Read fresh on every call; a missing file is the pack's 503.
+when the week has a file; every pack string HTML-escaped), the profile (http(s) links only),
+and the two gates' pass rates. Read fresh on every call; a missing pack file is a 503.
 
 ### `app/context.py` - The pack's files
 The three files, checked at boot (the server will not start without them) and before every
@@ -282,6 +289,14 @@ header reads as 0.3, per the spec), and dispatches. `SendMessage` answers throug
 as `/ask` and replies with a `Message` whose `metadata` carries the tier, model, cost, the tool
 trace, the verified citations and any pending intro id. One `SendMessage` is one question.
 
+### `app/signing.py` - The signed Agent Card
+`sign_card()` attaches `signatures`: a detached JWS (ES256) over the card without that field,
+canonicalised (keys sorted, no whitespace), with a header naming the key (`kid`) and where to
+fetch it (`jku`). `jwks()` serves the public key at `/.well-known/jwks.json`; `verify_card()` is
+what a careful caller runs. The P-256 key is derived from `CARD_SIGNING_SEED` (its SHA-256), so a
+deploy has no key file to manage; ECDSA signs with a fresh nonce each time, so one signature per
+card is kept and both card paths serve the same bytes. No seed, no signature.
+
 ### `app/main.py` - FastAPI routes
 Thin handlers for the 17 routes in section 4, the middleware and `build_agent_card()`. The body
 limit and the rate limit sit **inside** CORS and the `A2A-Version` header, so a 413 or a 429
@@ -312,7 +327,7 @@ called and nothing leaked; for the intro row, the request is paused at the gate.
   then **💬 Ask about this build** (fills the question; nothing is sent until **Ask**) or
   **📖 Read in a new tab** (`GET /portfolio/{week}`).
 - **Header:** the student's name and AgentForge, with the course credit small underneath (from
-  `data/profile.json`), the LinkedIn / GitHub / Résumé links, **🗂 My builds** (back to the
+  `data/profile.json`), the LinkedIn / GitHub / Resume links, **🗂 My builds** (back to the
   cards), **📖 README** and the health chip. The overview card ends with an About line.
 - **Ask:** the question box, example pills (*Week 4 build*, *Week 2 results*, *Why nano?*,
   *Compare W5 vs W6*, *Contact the student*, *Off-topic (test)*, *Oversized input (413)*) and
@@ -321,8 +336,8 @@ called and nothing leaked; for the intro row, the request is paused at the gate.
   (`Called get_build(5) → get_build(6) · 2 model calls`) and the **sources**, each marked
   verified or not. Every `[source]` in the answer is a chip - green if a tool returned it, red if
   invented - and **📚 Retrieved context** lists each tool call with the text it pulled (cited or
-  not); clicking a citation opens the excerpt it points at. An intro request adds the gate card
-  with **✓ Approve** / **✕ Reject**.
+  not); clicking a citation opens the excerpt it points at. An intro request adds a card that
+  says it is waiting for the student - the decision is made on `/admin`.
 - **History:** "Follow-ups use the last N turns (kept in this tab)" and **✕ New chat**.
 - **A2A:** **🪪 Fetch Agent Card** (shows the card and **verifies its signature in the browser**
   with WebCrypto: fetches the key its `jku` names, rebuilds the signed bytes, checks ES256) and
@@ -358,7 +373,7 @@ required on Render). Locally, with no token set, every route is open.
 | `/admin` | GET | The owner's page: token, intro inbox, audit log (its data needs the token) |
 | `/health` | GET | Both tiers, both caps, the price table |
 | `/readme` | GET | This file, dark-rendered |
-| `/portfolio` | GET | The build cards - one per week - plus both gates' pass rates (no model call) |
+| `/portfolio` | GET | The build cards - one per week - the profile and both gates' pass rates (no model call) |
 | `/portfolio/{week}` | GET | One build's read page: results, decisions, diagrams (HTML; 404 for an unknown week) |
 | `/.well-known/agent-card.json` (+ `agent.json`) | GET | A2A discovery - the Agent Card, signed when `CARD_SIGNING_SEED` is set |
 | `/.well-known/jwks.json` | GET | The public key (JWK Set) that verifies the card's signature |
@@ -424,12 +439,14 @@ each file must carry, and the headings the tools rely on:
 | `AGENTS.md` | `## What <capstone> is` · `## Operating rules` · `## Build history` with one paragraph per week opening `**W<n> · <name>**` · `## The PortfolioAgent` | the build cards, `get_build`, `get_architecture(overview / rules / portfolio_agent)` |
 | `architecture.md` | `## Spine` · `## Key decisions` (a numbered list; tag each with the weeks it came from, `(W5)`, `(W4, W6)`) · `## Diagram 1 - …` to `## Diagram 4 - …` **as text in code blocks** (tag lines with their week, too) · `## Where the numbers come from` | `get_architecture`, the read pages |
 | `eval_results.json` | `weekly` - one entry per gate, keyed `wNN_name`, with the frozen set, the threshold and the result **only where a run exists** - plus this agent's two gates | `get_eval_results`, the read pages, the site's pass rates |
-| `weeks/wNN.md` (optional, one per week) | `# W<n> · <name>`, then `## What it is` · `## How it works` · `## Key decisions` · `## Results` (each number with the file it is recorded in, or "No recorded eval run") · `## Stack`, in under ~400 words | `get_week_details`, the read pages' **In depth** |
+| `weeks/wNN.md` (optional, one per week) | `# W<n> · <name>`, then `## What it is` · `## How it works` · `## Key decisions` · `## Results` · `## Stack`, in under ~400 words | `get_week_details`, the read pages' **In depth** |
+| `profile.json` (optional) | `name`, `headline`, `linkedin`, `github`, `resume`, `photo` - links must be http(s) | the page header and About line |
 
 The section names live in one table, `SECTIONS` in `app/portfolio.py` - keep these headings,
 or edit that table. Rules the reference pack follows - keep them when you write yours:
 
-- **Quote measured numbers only,** each with the run it came from. A gate with no recorded run
+- **One story per week.** Quote the numbers your build measured, and tell each week once -
+  the same figures in `AGENTS.md`, `eval_results.json` and the week file. A gate with no score
   is described as a gate.
 - **Tag with weeks.** The read pages and the decisions a tool returns are found by their
   `(Wn)` tags.

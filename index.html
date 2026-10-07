@@ -558,7 +558,7 @@
       av.textContent = ''; av.appendChild(img); }
     else av.textContent = p.name.split(/\s+/).map(w => w[0]).join('').slice(0,2).toUpperCase();
     const links = document.getElementById('profile-links'); links.textContent = '';
-    [['linkedin','LinkedIn'],['github','GitHub'],['resume','Résumé']].forEach(([k, label]) => {
+    [['linkedin','LinkedIn'],['github','GitHub'],['resume','Resume']].forEach(([k, label]) => {
       if(!p[k]) return;
       const a = document.createElement('a'); a.href = p[k]; a.target = '_blank'; a.rel = 'noopener';
       a.textContent = label; links.appendChild(a);
@@ -568,7 +568,7 @@
     if(!p || !p.name) return '';
     const link = (k, label) => p[k] ? `<a href="${escHtml(p[k])}" target="_blank" rel="noopener">${label}</a>` : '';
     return `<div class="about">Built by <b>${escHtml(p.name)}</b>${p.headline?' - '+escHtml(p.headline):''}`+
-      link('linkedin','LinkedIn') + link('github','GitHub') + link('resume','Résumé') + `</div>`;
+      link('linkedin','LinkedIn') + link('github','GitHub') + link('resume','Resume') + `</div>`;
   }
   function renderBuilds(d){
     const cards = d.builds.map((b,i)=>`
