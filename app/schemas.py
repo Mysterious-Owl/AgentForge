@@ -125,7 +125,6 @@ class PendingAction(BaseModel):
     # "input-required" (at the gate) -> "executed" (approved) | "rejected" (declined)
     status: str = "input-required"
     result: str | None = None
-    notified: bool = False            # an email to the student was queued when it arrived
     user_id: str = "anon"
     session_id: str = "default"       # where it was proposed - the decision is audited there too
 

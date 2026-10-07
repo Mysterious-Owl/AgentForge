@@ -119,7 +119,7 @@
     el.className = 'card';
     el.innerHTML =
       `<div class="meta"><span class="badge ${map[a.status]||'badge-neutral'}">${escHtml(a.status)}</span>`+
-      `<span>id <b>${escHtml(a.id)}</b> · ${escHtml(a.reason)}${a.notified ? ' · 📧 emailed to you' : ''}</span></div>`+
+      `<span>id <b>${escHtml(a.id)}</b> · ${escHtml(a.reason)}</span></div>`+
       `<div class="text"><b>${escHtml(a.name)}</b>${a.company?' · '+escHtml(a.company):''} · ${escHtml(a.contact)}\n`+
       `${escHtml(a.message)}</div>`+
       (a.result ? `<div class="note">${escHtml(a.result)}</div>` : '')+

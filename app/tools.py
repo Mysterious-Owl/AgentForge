@@ -38,7 +38,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app import notify, portfolio
+from app import portfolio
 from app.schemas import IntroRequest, PendingAction, ToolEnvelope
 
 logger = logging.getLogger(__name__)
@@ -262,11 +262,8 @@ def request_intro(args: dict, user_id: str, session_id: str) -> ToolEnvelope:
         except TooManyPendingActions as exc:
             return ToolEnvelope(success=False, tool="request_intro", error=str(exc))
         _PENDING[action.id] = action
-    # The copy that survives a restart: an email to the student (if configured), off the
-    # request path. The request itself still waits here for the decision.
-    action.notified = notify.notify_intro(action)
-    logger.info("intro request %s proposed (status=input-required, awaiting the student%s)",
-                action.id, ", emailed" if action.notified else "")
+    logger.info("intro request %s proposed (status=input-required, awaiting the student)",
+                action.id)
     return ToolEnvelope(success=True, tool="request_intro",
                         data={"action_id": action.id, "status": action.status,
                               "note": "waiting for the student's approval; nothing is sent yet"})
