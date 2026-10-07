@@ -90,10 +90,10 @@
       }
     },
     "cost": {
-      "avg_usd_per_request": 0.000734,
-      "routed_total_usd": 0.019813,
-      "all_frontier_total_usd": 0.039077,
-      "savings_ratio_x": 1.97,
+      "avg_usd_per_request": 0.000743,
+      "routed_total_usd": 0.020055,
+      "all_frontier_total_usd": 0.039622,
+      "savings_ratio_x": 1.98,
       "ceiling_usd_per_request": 0.05,
       "_note": "ceiling_usd_per_request is the one number here that is real and enforced: app/budget.py rejects any request whose projected cost exceeds it (413), and GET /health reports it. savings_ratio_x is the all-frontier bill divided by the routed-mix bill on the same tokens."
     },

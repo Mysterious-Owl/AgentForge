@@ -142,6 +142,7 @@ def test_the_prompt_has_the_build_index_not_the_pack(monkeypatch):
     system = model.seen["messages"][0][0]["content"]
     assert "W4 KnowledgeVault" in system and "W17 Demo Day + PortfolioAgent" in system
     assert "text-embedding-3-large" not in system        # a W4 fact: only a tool returns it
+    assert "third person" in system and "never as 'you'" in system   # the visitor is not the student
 
 
 # ---------- citations are checked by code ----------

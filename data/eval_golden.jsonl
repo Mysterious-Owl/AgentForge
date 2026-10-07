@@ -1,27 +1,27 @@
-{"id": "q01", "question": "What model do you use?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 95}
-{"id": "q02", "question": "How does the memory layer work?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 120}
-{"id": "q03", "question": "What is the cost ceiling?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 90}
-{"id": "q04", "question": "How many iterations are allowed?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 100}
-{"id": "q05", "question": "What is the approval gate?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 115}
-{"id": "q06", "question": "What does the OUT_OF_SCOPE sentinel mean?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 110}
-{"id": "q07", "question": "What tools does the agent expose?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 125}
-{"id": "q08", "question": "What is the sample eval score?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 95}
-{"id": "q09", "question": "What is the price gap between the two tiers?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 85}
-{"id": "q10", "question": "Which routes does the API have?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 130}
-{"id": "q11", "question": "What is the small model tier?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 100}
-{"id": "q12", "question": "What is the frontier model tier?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 100}
-{"id": "q13", "question": "How is PII handled in logs?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 120}
-{"id": "q14", "question": "What is the context pack?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 110}
-{"id": "q15", "question": "What is the A2A protocol version?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 90}
-{"id": "q16", "question": "Is streaming supported?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 80}
-{"id": "q17", "question": "Why does the small tier run on nano instead of a local model?", "expected_tier": "frontier", "prompt_tokens": 1220, "completion_tokens": 150}
-{"id": "q18", "question": "Compare the small and frontier tiers for this workload.", "expected_tier": "frontier", "prompt_tokens": 1210, "completion_tokens": 150}
-{"id": "q19", "question": "Walk me through the trade-off in your routing decision.", "expected_tier": "frontier", "prompt_tokens": 1220, "completion_tokens": 160}
-{"id": "q20", "question": "Why is approval a state the system owns and not a user sentence?", "expected_tier": "frontier", "prompt_tokens": 1220, "completion_tokens": 140}
-{"id": "q21", "question": "Evaluate whether the cost ceiling is set at the right level.", "expected_tier": "frontier", "prompt_tokens": 1220, "completion_tokens": 145}
-{"id": "q22", "question": "What are the pros and cons of the deterministic classifier?", "expected_tier": "frontier", "prompt_tokens": 1220, "completion_tokens": 150}
-{"id": "q23", "question": "Describe in full detail every file in the app directory and what each one is responsible for, covering config, schemas, router, tools, memory, budget, llm, scrub and main, one at a time in order.", "expected_tier": "small", "prompt_tokens": 1250, "completion_tokens": 140}
-{"id": "q24", "question": "List the reasons the health endpoint returns each field, no analysis needed.", "expected_tier": "small", "prompt_tokens": 1220, "completion_tokens": 130}
-{"id": "q25", "question": "Tell me about your architecture.", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 120}
-{"id": "q26", "question": "What design decisions does AGENTS.md record?", "expected_tier": "small", "prompt_tokens": 1210, "completion_tokens": 120}
-{"id": "q27", "question": "Contrast the Week 11 and Week 17 A2A implementations.", "expected_tier": "frontier", "prompt_tokens": 1220, "completion_tokens": 150}
+{"id": "q01", "question": "What model do you use?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 95}
+{"id": "q02", "question": "How does the memory layer work?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 120}
+{"id": "q03", "question": "What is the cost ceiling?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 90}
+{"id": "q04", "question": "How many iterations are allowed?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 100}
+{"id": "q05", "question": "What is the approval gate?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 115}
+{"id": "q06", "question": "What does the OUT_OF_SCOPE sentinel mean?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 110}
+{"id": "q07", "question": "What tools does the agent expose?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 125}
+{"id": "q08", "question": "What is the sample eval score?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 95}
+{"id": "q09", "question": "What is the price gap between the two tiers?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 85}
+{"id": "q10", "question": "Which routes does the API have?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 130}
+{"id": "q11", "question": "What is the small model tier?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 100}
+{"id": "q12", "question": "What is the frontier model tier?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 100}
+{"id": "q13", "question": "How is PII handled in logs?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 120}
+{"id": "q14", "question": "What is the context pack?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 110}
+{"id": "q15", "question": "What is the A2A protocol version?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 90}
+{"id": "q16", "question": "Is streaming supported?", "expected_tier": "small", "prompt_tokens": 1230, "completion_tokens": 80}
+{"id": "q17", "question": "Why does the small tier run on nano instead of a local model?", "expected_tier": "frontier", "prompt_tokens": 1240, "completion_tokens": 150}
+{"id": "q18", "question": "Compare the small and frontier tiers for this workload.", "expected_tier": "frontier", "prompt_tokens": 1240, "completion_tokens": 150}
+{"id": "q19", "question": "Walk me through the trade-off in your routing decision.", "expected_tier": "frontier", "prompt_tokens": 1240, "completion_tokens": 160}
+{"id": "q20", "question": "Why is approval a state the system owns and not a user sentence?", "expected_tier": "frontier", "prompt_tokens": 1240, "completion_tokens": 140}
+{"id": "q21", "question": "Evaluate whether the cost ceiling is set at the right level.", "expected_tier": "frontier", "prompt_tokens": 1240, "completion_tokens": 145}
+{"id": "q22", "question": "What are the pros and cons of the deterministic classifier?", "expected_tier": "frontier", "prompt_tokens": 1240, "completion_tokens": 150}
+{"id": "q23", "question": "Describe in full detail every file in the app directory and what each one is responsible for, covering config, schemas, router, tools, memory, budget, llm, scrub and main, one at a time in order.", "expected_tier": "small", "prompt_tokens": 1280, "completion_tokens": 140}
+{"id": "q24", "question": "List the reasons the health endpoint returns each field, no analysis needed.", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 130}
+{"id": "q25", "question": "Tell me about your architecture.", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 120}
+{"id": "q26", "question": "What design decisions does AGENTS.md record?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 120}
+{"id": "q27", "question": "Contrast the Week 11 and Week 17 A2A implementations.", "expected_tier": "frontier", "prompt_tokens": 1240, "completion_tokens": 150}
