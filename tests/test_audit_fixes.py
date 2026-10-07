@@ -9,7 +9,6 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app import config, guard, llm, memory, signing, tools
-from app.agent import EMPTY_ANSWER
 from app.main import app
 from app.schemas import AskRequest, ModelTurn, ToolCall
 from app.scrub import scrub
@@ -67,10 +66,13 @@ def test_a_non_ascii_token_is_a_401_not_a_500(monkeypatch):
     assert r.status_code == 401
 
 
-def test_an_empty_answer_gets_a_message(monkeypatch):
-    monkeypatch.setattr(llm, "chat", scripted(answer("")))
-    body = client.post("/ask", json={"question": "What did you build in Week 4?"}).json()
-    assert body["answer"] == EMPTY_ANSWER and body["grounded"] is False
+def test_an_empty_answer_is_refused_not_passed_on(monkeypatch):
+    for blank in ("", "   \n\t "):
+        monkeypatch.setattr(llm, "chat", scripted(answer(blank)))
+        r = client.post("/ask", json={"question": "What did you build in Week 4?"})
+        assert r.status_code == 502 and "empty answer" in r.json()["detail"]
+    page = (ROOT / "index.html").read_text(encoding="utf-8")
+    assert "if(!(d.answer || '').trim()) throw" in page        # the page refuses one too
 
 
 def test_deeply_nested_arguments_are_a_tool_error(monkeypatch):
@@ -87,9 +89,11 @@ def test_deeply_nested_a2a_json_is_a_parse_error():
     assert r.status_code == 200 and r.json()["error"]["code"] == -32700
 
 
-def test_a_huge_week_is_a_tool_error():
-    env = tools.execute_tool("get_build", {"week": 10 ** 300})
-    assert env.success is False and "no Week" in env.error
+def test_weeks_are_1_to_17():
+    for week in (0, 18, 99, 10 ** 300, -4):
+        env = tools.execute_tool("get_build", {"week": week})
+        assert env.success is False and "weeks are 1-17" in env.error, week
+    assert tools.execute_tool("get_build", {"week": 17}).success
 
 
 def test_the_audit_line_is_scrubbed_before_it_is_cut(monkeypatch):

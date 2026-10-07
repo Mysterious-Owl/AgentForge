@@ -345,8 +345,10 @@
         body:JSON.stringify({question:q, history:HISTORY, user_id:DEMO_USER, session_id:'web'})});
       const d=await r.json().catch(()=>({}));
       if(!r.ok){ throw new Error(`${r.status} - ${formatDetail(d.detail, r.statusText)}`); }
+      // Never show - or remember - an empty message as an answer.
+      if(!(d.answer || '').trim()) throw new Error('The agent returned an empty answer - please ask again.');
       renderAnswer(d);
-      if(d.answer) rememberTurn(q, d.answer);
+      rememberTurn(q, d.answer.trim());
       addLog('success',`Done - ${d.tier} tier · ${d.model_calls} model call(s) · `+
         `${traceText(d.tools_called)||'no tool'} · $${(d.cost_usd??0).toFixed(6)}`);
     } catch(e){ document.getElementById('output-body').innerHTML=`<div class="error-box">${escHtml(e.message)}</div>`;

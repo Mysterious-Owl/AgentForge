@@ -36,8 +36,11 @@ GenerateFn = Callable[[list[dict], str, list[dict], IterationBudget | None], Mod
 
 # [AGENTS.md · W4] - a bracketed tag, not a markdown link "[text](url)".
 _CITATION = re.compile(r"\[([^\[\]\n]{1,80})\](?!\()")
-# What a visitor sees when the model ends with no text (a refusal, or the budget ran out).
-EMPTY_ANSWER = "I could not put an answer together for that - please try rephrasing."
+
+
+class EmptyAnswer(RuntimeError):
+    """The model finished with no text (blank, whitespace, or out of completion budget) - an
+    empty message is never passed on as an answer; the route returns it as a 502."""
 _ONE_INTRO = "one intro request per question - it is already waiting for the student"
 
 
@@ -94,7 +97,9 @@ def run(question: str, history: list[Turn], pack: dict, model: str, frontier_mod
         out.baseline_usd = round(out.baseline_usd + cost_of(
             turn.prompt_tokens, turn.completion_tokens, frontier_model), 6)
         if not turn.tool_calls:
-            out.answer = turn.text.strip() or EMPTY_ANSWER
+            out.answer = turn.text.strip()
+            if not out.answer:
+                raise EmptyAnswer("the model returned an empty answer")
             break
         messages.append(llm.assistant_tool_message(turn))
         for call in turn.tool_calls:
