@@ -95,6 +95,33 @@ def section(name: str) -> dict | None:
             "source": f"{file} · {name}"}
 
 
+_PROFILE_TEXT = ("name", "headline")
+_PROFILE_LINKS = ("linkedin", "github", "resume", "photo")
+
+
+def profile() -> dict:
+    """`data/profile.json` - who built this: name, headline, LinkedIn, GitHub, resume, photo.
+
+    Optional (no file -> {}). Text is capped; a link is kept only if it is an http(s) URL, so a
+    `javascript:` value in the file can never reach the page as a link."""
+    path = _pack_dir() / "profile.json"
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ContextPackError(f"profile.json is not valid JSON: {exc}") from exc
+    out = {}
+    for key in _PROFILE_TEXT:
+        if isinstance(data.get(key), str) and data[key].strip():
+            out[key] = data[key].strip()[:120]
+    for key in _PROFILE_LINKS:
+        value = data.get(key)
+        if isinstance(value, str) and value.strip().lower().startswith(("https://", "http://")):
+            out[key] = value.strip()[:500]
+    return out
+
+
 def week_architecture(week: int) -> dict:
     """The architecture slice for ONE week: the key decisions that cite it and every diagram
     line tagged with it - the same filter the read page uses, served to the model."""

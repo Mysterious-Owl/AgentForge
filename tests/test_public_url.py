@@ -219,11 +219,11 @@ def test_health_says_whether_the_admin_token_is_required(monkeypatch):
     assert client.get("/health").json()["admin_token_required"] is True
 
 
-def test_the_ui_handles_an_owner_only_answer():
-    page = (ROOT / "index.html").read_text(encoding="utf-8")
-    audit = page[page.index("async function viewAudit"):]
-    audit = audit[:audit.index("\n  }\n")]
-    assert "r.ok" in audit                          # a 401 is not rendered as "undefined entries"
+def test_the_admin_page_handles_an_owner_only_answer():
+    page = (ROOT / "admin.html").read_text(encoding="utf-8")
+    call = page[page.index("async function call"):]
+    call = call[:call.index("\n  }\n")]
+    assert "r.status === 401" in call and "!r.ok" in call   # a 401 is said, not rendered blank
     assert "sessionStorage" in page                 # the owner's token stays in this tab only
     assert "localStorage" not in page
     assert re.search(r"Authorization['\"]?\s*:", page)   # sent on the owner-only calls

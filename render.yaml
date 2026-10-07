@@ -14,7 +14,9 @@ services:
       - key: OPENAI_API_KEY
         sync: false             # paste it in the dashboard - never commit it
       - key: ADMIN_TOKEN
-        generateValue: true     # random; read it in the dashboard to approve actions
+        generateValue: true     # random; read it in the dashboard, paste it on /admin
+      - key: CARD_SIGNING_SEED
+        generateValue: true     # random; the Agent Card is signed with a key derived from it
       - key: TRUST_FORWARDED_FOR
         value: "true"           # behind Render's proxy - rate-limit the real client
       - key: DAILY_BUDGET_USD

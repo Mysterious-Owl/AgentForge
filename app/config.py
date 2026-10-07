@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     # A2A protocol version: stamped on the card's interface (`protocolVersion`) and the
     # `A2A-Version` header of every response; /a2a refuses a client asking for another.
     a2a_protocol_version: str = "1.0"
+    # Signs the Agent Card (app/signing.py): its SHA-256 is the P-256 key. Render generates it
+    # (render.yaml); unset = the card is served unsigned.
+    card_signing_seed: str | None = None
 
     # --- The approval gate (Tool layer) ---
     # Every mutating tool waits for an explicit human YES before it executes.

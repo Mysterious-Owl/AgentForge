@@ -12,6 +12,7 @@ tiktoken==0.8.0            # the cost ceiling counts input tokens with the model
 markdown==3.7              # renders GET /readme
 httpx==0.28.1              # the SDK's HTTP client, and what FastAPI's TestClient drives
 anyio==4.12.0              # pulled in by starlette and httpx - newer ones make TestClient warn
+cryptography==48.0.1       # ES256 - signs the Agent Card (app/signing.py)
 
 # --- Tests ---
 pytest==8.3.3

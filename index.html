@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Applied GenAI & Agentic AI Engineering Course Week 17 - PortfolioAgent</title>
+  <title>AgentForge - PortfolioAgent</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -18,9 +18,25 @@
       font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
       font-size:14px; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
     header { display:flex; align-items:center; justify-content:space-between;
-      padding:0 20px; height:52px; background:var(--surface);
+      padding:0 20px; height:58px; background:var(--surface);
       border-bottom:1px solid var(--border); flex-shrink:0; }
     .header-title { display:flex; align-items:center; gap:10px; font-size:15px; font-weight:600; }
+    .avatar { width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,#1a56db,#7e3af2);
+      display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700;
+      color:#fff; overflow:hidden; flex-shrink:0; }
+    .avatar img { width:100%; height:100%; object-fit:cover; }
+    .who { display:flex; flex-direction:column; line-height:1.25; }
+    .who-name { font-size:15px; font-weight:600; }
+    .who-credit { font-size:11px; font-weight:400; color:var(--text-muted); }
+    .profile-links { display:flex; gap:6px; }
+    .profile-links a { color:var(--text-muted); border:1px solid var(--border); border-radius:var(--radius);
+      padding:5px 10px; font-size:12px; text-decoration:none; }
+    .profile-links a:hover { color:var(--text); background:var(--surface-2); }
+    .about { margin-top:10px; font-size:12.5px; color:var(--text-muted); }
+    .about b { color:var(--text); }
+    .about a { color:var(--blue); text-decoration:none; margin-left:8px; }
+    .owner-link { font-size:11px; color:var(--text-muted); padding:12px 16px; }
+    .owner-link a { color:var(--text-muted); }
     .header-title .logo { width:28px; height:28px;
       background:linear-gradient(135deg,#1a56db,#7e3af2); border-radius:6px;
       display:flex; align-items:center; justify-content:center; font-size:15px; }
@@ -169,12 +185,14 @@
 <body>
 <header>
   <div class="header-title">
-    <div class="logo">🤖</div>
-    Applied GenAI &amp; Agentic AI Engineering Course
-    <span class="week-badge">Week 17</span>
-    <span class="header-sub">- PortfolioAgent</span>
+    <div class="avatar" id="avatar">AF</div>
+    <div class="who">
+      <span class="who-name" id="who-name">AgentForge</span>
+      <span class="who-credit">Capstone · Applied GenAI &amp; Agentic AI Engineering Course · Week 17</span>
+    </div>
   </div>
   <div class="header-actions">
+    <div class="profile-links" id="profile-links"></div>
     <button class="btn-ghost" onclick="showBuilds()">🗂 My builds</button>
     <button class="btn-ghost" onclick="window.open('/readme','_blank')">📖 README</button>
     <div id="health-chip" onclick="checkHealth()" title="Click to re-check">
@@ -215,19 +233,7 @@
         <span id="spin-a" class="spinner"></span>💬 &nbsp;Ask
       </button>
     </div>
-    <div class="panel-section">
-      <label>Memory + approvals</label>
-      <div class="btn-row">
-        <button class="btn-secondary" onclick="viewAudit()">🧾 My audit log</button>
-        <button class="btn-secondary" onclick="viewInbox()">📥 Intro requests</button>
-      </div>
-    </div>
-    <div class="panel-section" id="owner-section" hidden>
-      <label for="owner-token">Owner - admin token</label>
-      <input class="owner-input" id="owner-token" type="password" autocomplete="off"
-             placeholder="Needed to decide intro requests and read the logs" oninput="saveOwnerToken()">
-      <div class="char-count">Kept in this tab only (sessionStorage) and sent as a bearer token.</div>
-    </div>
+    <div class="owner-link">Student? Intro requests and audit logs are on the <a href="/admin">owner page</a>.</div>
   </div>
   <div class="right-panel">
     <div class="pane pane-output">
@@ -308,8 +314,6 @@
     try { const r=await fetch(`${API}/health`); const d=await r.json();
       const tiers=`${d.small_model} / ${d.frontier_model}`;
       chip.className='online'; txt.textContent=`Online · ${d.small_model}`;
-      document.getElementById('owner-section').hidden = !d.admin_token_required;
-      document.getElementById('owner-token').value = ownerToken();
       addLog('success',`Health OK - tiers: ${tiers}`);
     } catch(e){ chip.className='offline'; txt.textContent='Offline';
       addLog('error',`Health check failed - is the server running? (${e.message})`); }
@@ -460,14 +464,51 @@
     setLoading(true); addLog('info','GET /.well-known/agent-card.json');
     try {
       const r=await fetch(`${API}/.well-known/agent-card.json`); const d=await r.json();
+      const v = await verifyCard(d);
+      const sig = v.ok === true ? '<span class="badge badge-grounded">✓ signature verified</span>'
+        : v.ok === false ? `<span class="badge badge-ungrounded">✕ ${escHtml(v.why)}</span>`
+        : `<span class="badge badge-neutral">signed · ${escHtml(v.why)}</span>`;
       document.getElementById('output-body').innerHTML =
         `<div class="answer-card"><div class="answer-meta" style="margin:0 0 10px;padding:0;border:none">`+
-        `<span class="badge badge-grounded">A2A Agent Card</span></div>`+
+        `<span class="badge badge-grounded">A2A Agent Card</span>${sig}`+
+        (v.kid ? `<span class="kv">ES256 · kid <b>${escHtml(v.kid)}</b></span>` : '')+`</div>`+
         `<div class="card-json">${escHtml(JSON.stringify(d,null,2))}</div></div>`;
-      addLog('success',`Agent Card - ${d.name} · ${d.skills.length} skill(s)`);
+      addLog(v.ok === false ? 'warn' : 'success',
+        `Agent Card - ${d.name} · ${d.skills.length} skill(s) · ${v.ok ? 'signature verified' : v.why}`);
     } catch(e){ document.getElementById('output-body').innerHTML=`<div class="error-box">${escHtml(e.message)}</div>`;
       addLog('error',e.message);
     } finally { setLoading(false); }
+  }
+  // What a careful caller does with a signed card: fetch the key its header names (jku/kid),
+  // rebuild the exact bytes that were signed - the card without `signatures`, keys sorted, no
+  // whitespace - and verify the ES256 signature. All in the browser (WebCrypto).
+  function canonical(v){
+    if(Array.isArray(v)) return '[' + v.map(canonical).join(',') + ']';
+    if(v && typeof v === 'object') return '{' + Object.keys(v).sort()
+      .map(k => JSON.stringify(k) + ':' + canonical(v[k])).join(',') + '}';
+    return JSON.stringify(v);
+  }
+  const b64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  const unb64url = t => Uint8Array.from(atob(t.replace(/-/g,'+').replace(/_/g,'/') + '==='.slice((t.length+3)%4)), c => c.charCodeAt(0));
+  async function verifyCard(card){
+    const sigs = card.signatures || [];
+    if(!sigs.length) return {ok:false, why:'unsigned card'};
+    try {
+      const header = JSON.parse(new TextDecoder().decode(unb64url(sigs[0].protected)));
+      const keys = await (await fetch(`${API}${new URL(header.jku).pathname}`)).json();
+      const jwk = (keys.keys || []).find(k => k.kid === header.kid);
+      if(!jwk) return {ok:false, why:'no key for this kid', kid:header.kid};
+      const {signatures, ...unsigned} = card;
+      const payload = b64url(new TextEncoder().encode(canonical(unsigned)));
+      const data = new TextEncoder().encode(`${sigs[0].protected}.${payload}`);
+      const key = await crypto.subtle.importKey('jwk', {kty:jwk.kty, crv:jwk.crv, x:jwk.x, y:jwk.y},
+                                                {name:'ECDSA', namedCurve:'P-256'}, false, ['verify']);
+      const ok = await crypto.subtle.verify({name:'ECDSA', hash:'SHA-256'}, key,
+                                            unb64url(sigs[0].signature), data);
+      return ok ? {ok:true, kid:header.kid} : {ok:false, why:'signature does not match', kid:header.kid};
+    } catch(e){
+      return {ok:null, why:'could not verify here'};
+    }
   }
   // What another agent would do: read the card, find the interface, send JSON-RPC SendMessage.
   async function askA2A(){
@@ -502,10 +543,32 @@
     try {
       if(!BUILDS){ const r = await fetch(`${API}/portfolio`); const d = await r.json();
         if(!r.ok) throw new Error(`${r.status} - ${formatDetail(d.detail, r.statusText)}`);
-        BUILDS = d; }
+        BUILDS = d; renderProfile(d.profile); }
       renderBuilds(BUILDS);
       addLog('success',`Portfolio - ${BUILDS.builds.length} builds · click a card for the details`);
     } catch(e){ showError(e); }
+  }
+  // data/profile.json via /portfolio. Links are http(s) only (the server drops anything else).
+  function renderProfile(p){
+    if(!p || !p.name) return;
+    document.getElementById('who-name').textContent = `${p.name} · AgentForge`;
+    document.title = `${p.name} - AgentForge`;
+    const av = document.getElementById('avatar');
+    if(p.photo){ const img = document.createElement('img'); img.src = p.photo; img.alt = p.name;
+      av.textContent = ''; av.appendChild(img); }
+    else av.textContent = p.name.split(/\s+/).map(w => w[0]).join('').slice(0,2).toUpperCase();
+    const links = document.getElementById('profile-links'); links.textContent = '';
+    [['linkedin','LinkedIn'],['github','GitHub'],['resume','Résumé']].forEach(([k, label]) => {
+      if(!p[k]) return;
+      const a = document.createElement('a'); a.href = p[k]; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = label; links.appendChild(a);
+    });
+  }
+  function aboutLine(p){
+    if(!p || !p.name) return '';
+    const link = (k, label) => p[k] ? `<a href="${escHtml(p[k])}" target="_blank" rel="noopener">${label}</a>` : '';
+    return `<div class="about">Built by <b>${escHtml(p.name)}</b>${p.headline?' - '+escHtml(p.headline):''}`+
+      link('linkedin','LinkedIn') + link('github','GitHub') + link('resume','Résumé') + `</div>`;
   }
   function renderBuilds(d){
     const cards = d.builds.map((b,i)=>`
@@ -522,7 +585,7 @@
       `<span class="badge badge-neutral">${escHtml(d.title||'Portfolio')} · what I built</span>`+
       `<span class="kv">${d.builds.length} weekly builds · click a card for the details</span>`+
       gateChips(d.gates) + `</div>`+
-      `<div class="builds-intro">${fmtAnswer(d.overview)}</div></div>`+
+      `<div class="builds-intro">${fmtAnswer(d.overview)}</div>${aboutLine(d.profile)}</div>`+
       `<div class="builds-grid">${cards}</div>`;
     // Bound in code, like the gate buttons: no build text ever passes through an attribute.
     document.querySelectorAll('#output-body .build-card').forEach(c => {
@@ -546,21 +609,6 @@
     addLog('info',`Question loaded for W${b.week} ${b.name} - click Ask`);
   }
   // ── Tool layer ─────────────────────────────────────────────────────────────
-  // ── Owner token: only a deployment that sets ADMIN_TOKEN asks for it ──────────
-  const OWNER_KEY = 'portfolioagent-owner-token';
-  function ownerToken(){ try { return sessionStorage.getItem(OWNER_KEY) || ''; } catch(e){ return ''; } }
-  function saveOwnerToken(){
-    try { sessionStorage.setItem(OWNER_KEY, document.getElementById('owner-token').value.trim()); }
-    catch(e){ /* storage blocked - the token lives only in the field */ }
-  }
-  function ownerHeaders(){
-    const t = ownerToken() || document.getElementById('owner-token').value.trim();
-    return t ? {'Authorization': `Bearer ${t}`} : {};
-  }
-  function ownerOnly(r){
-    return r.status === 401 ? 'Owner only - enter this deployment\'s admin token below. '
-      + 'Visitors can ask for an intro and watch it pause; only the owner decides.' : null;
-  }
   async function postJSON(path, body, extra={}){
     const r = await fetch(`${API}${path}`, {method:'POST',
       headers:{'Content-Type':'application/json', ...extra}, body:JSON.stringify(body)});
@@ -578,10 +626,8 @@
     const map = {'input-required':'badge-pending','executed':'badge-grounded','rejected':'badge-ungrounded'};
     const badge = `<span class="badge ${map[d.status]||'badge-neutral'}">${escHtml(d.status)}</span>`;
     const gate = d.status==='input-required'
-      ? `<div class="gate-actions">
-           <button class="btn-primary" data-decide="approve">✓ Approve</button>
-           <button class="btn-secondary" data-decide="reject">✕ Reject</button>
-         </div>` : '';
+      ? `<div class="kv" style="margin-top:8px">⏸ Waiting for the student - only they can approve it,
+           from the owner page. Nothing is sent until then.</div>` : '';
     target.innerHTML =
       `<div class="answer-card">
          <div class="answer-meta" style="margin:0 0 10px;padding:0;border:none">${badge}
@@ -591,52 +637,6 @@ ${escHtml(d.message)}</div>
          ${d.result?`<div class="kv" style="margin-top:8px">${escHtml(d.result)}</div>`:''}
          ${gate}
        </div>`;
-    // Bind the gate buttons in code: the action id never passes through an HTML attribute.
-    target.querySelectorAll('[data-decide]').forEach(b =>
-      b.addEventListener('click', () => decideAction(d.id, b.dataset.decide === 'approve')));
-  }
-  async function decideAction(id, approve){
-    setLoading(true); addLog('info',`POST /approve - ${id} approve=${approve}`);
-    try {
-      const {r,d} = await postJSON('/approve', {action_id:id, approve, approver:'owner'},
-                                   ownerHeaders());
-      if(r.status === 409){ throw new Error(`409 - this action was already ${d.detail.status}`
-                                             + ' - a decision is made once'); }
-      if(!r.ok) throw new Error(ownerOnly(r) || `${r.status} - ${formatDetail(d.detail, r.statusText)}`);
-      renderAction(d);
-      addLog(approve?'success':'warn',`Action ${id} - ${d.status}${d.result?' · '+d.result:''}`);
-    } catch(e){ showError(e); } finally { setLoading(false); }
-  }
-  // ── Memory ─────────────────────────────────────────────────────────────────
-  async function viewAudit(){
-    setLoading(true); addLog('info',`GET /audit/${DEMO_USER}`);
-    try {
-      const r = await fetch(`${API}/audit/${DEMO_USER}`, {headers: ownerHeaders()});
-      const d = await r.json().catch(()=>({}));
-      if(!r.ok) throw new Error(ownerOnly(r) || `${r.status} - ${formatDetail(d.detail, r.statusText)}`);
-      const rows = d.length ? d.map(e=>`${e.kind}  ·  ${e.detail}`).join('\n')
-        : '(empty - ask a question first)';
-      document.getElementById('output-body').innerHTML =
-        `<div class="answer-card"><div class="answer-meta" style="margin:0 0 10px;padding:0;border:none">`+
-        `<span class="badge badge-neutral">audit log · ${escHtml(DEMO_USER)}</span>`+
-        `<span class="kv">${d.length} entr${d.length===1?'y':'ies'}</span></div>`+
-        `<div class="card-json">${escHtml(rows)}</div></div>`;
-      addLog('success',`Audit log - ${d.length} entr${d.length===1?'y':'ies'} for ${DEMO_USER}`);
-    } catch(e){ showError(e); } finally { setLoading(false); }
-  }
-  async function viewInbox(){
-    setLoading(true); addLog('info','GET /actions');
-    try {
-      const r = await fetch(`${API}/actions`, {headers: ownerHeaders()});
-      const d = await r.json().catch(()=>({}));
-      if(!r.ok) throw new Error(ownerOnly(r) || `${r.status} - ${formatDetail(d.detail, r.statusText)}`);
-      const body = document.getElementById('output-body');
-      body.innerHTML = `<div class="answer-card"><div class="answer-meta" style="margin:0;padding:0;border:none">`+
-        `<span class="badge badge-neutral">intro requests</span><span class="kv">${d.length} waiting for a decision</span>`+
-        `</div></div>` + d.map((_, i) => `<div id="inbox-${i}"></div>`).join('');
-      d.forEach((a, i) => renderAction(a, document.getElementById(`inbox-${i}`)));
-      addLog('success', `Inbox - ${d.length} request(s) waiting`);
-    } catch(e){ showError(e); } finally { setLoading(false); }
   }
   checkHealth();
   showHistory();

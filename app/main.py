@@ -1,11 +1,13 @@
 """FastAPI routes for the PortfolioAgent - an agent over the student's capstone, wired thin.
 
 A2A surface (discovery, then the call itself):
-  GET  /.well-known/agent-card.json  -> the Agent Card (+ /.well-known/agent.json, legacy alias)
+  GET  /.well-known/agent-card.json  -> the Agent Card, signed (+ /.well-known/agent.json, legacy)
+  GET  /.well-known/jwks.json        -> the public key that verifies the card's signature
   POST /a2a                          -> A2A 1.0 JSON-RPC: SendMessage answers exactly like /ask
 
 UI contract:
   GET  /                        -> serve browser UI (index.html)
+  GET  /admin                   -> the owner's page: token, intro inbox, audit log (admin.html)
   GET  /health                  -> liveness + both model tiers, both caps, and the price table
   GET  /readme                  -> render README.md as dark-themed HTML
   GET  /portfolio               -> the build cards, parsed from data/AGENTS.md (no model call)
@@ -38,7 +40,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from app import a2a, guard, llm, memory, portfolio, tools
+from app import a2a, guard, llm, memory, portfolio, signing, tools
 from app.budget import (
     BudgetExceeded,
     IterationBudget,
@@ -161,11 +163,19 @@ def build_agent_card() -> AgentCard:
     )
 
 
+def card_document() -> dict[str, Any]:
+    """The card as served: its JSON, plus `signatures` - a detached JWS over exactly that JSON -
+    when this deployment has a signing seed (app/signing.py). Unsigned, it carries no
+    `signatures` at all."""
+    card = build_agent_card().model_dump(mode="json", by_alias=True, exclude_none=True)
+    signatures = signing.sign_card(card, get_settings().agent_base_url)
+    return {**card, "signatures": signatures} if signatures else card
+
+
 def _card_json() -> Response:
-    return Response(
-        content=build_agent_card().model_dump_json(by_alias=True, exclude_none=True),
-        media_type="application/json",
-    )
+    import json
+    return Response(content=json.dumps(card_document(), ensure_ascii=False),
+                    media_type="application/json")
 
 
 @app.get("/.well-known/agent-card.json", include_in_schema=False)
@@ -178,6 +188,12 @@ def agent_card() -> Response:
 def agent_card_legacy() -> Response:
     """Legacy pre-0.3 discovery path - kept as an alias for older clients."""
     return _card_json()
+
+
+@app.get(signing.JWKS_PATH, include_in_schema=False)
+def card_keys() -> dict[str, Any]:
+    """The JWK Set a caller verifies the card's signature with - the `jku` in its header."""
+    return signing.jwks()
 
 
 # ── UI / health / readme ─────────────────────────────────────────────────────────
@@ -195,6 +211,7 @@ def health() -> dict[str, Any]:
         "cost_ceiling_usd": s.cost_ceiling_usd,
         # Lets the UI label the owner-only buttons on a deployment instead of failing on them.
         "admin_token_required": bool(s.admin_token),
+        "card_signed": bool(s.card_signing_seed),
         "pricing_per_1m": {
             "small": {"input": s.small_input_cost_per_1m, "output": s.small_output_cost_per_1m},
             "frontier": {"input": s.frontier_input_cost_per_1m,
@@ -211,13 +228,24 @@ def serve_ui():
     return FileResponse(idx, media_type="text/html")
 
 
+@app.get("/admin", include_in_schema=False)
+def serve_admin():
+    """The owner's page. Serving it is harmless: everything it SHOWS comes from [admin] routes,
+    which need the bearer token on a deployment - the page only holds the token box."""
+    page = Path(__file__).parent.parent / "admin.html"
+    if not page.exists():
+        raise HTTPException(status_code=404, detail="admin.html not found")
+    return FileResponse(page, media_type="text/html")
+
+
 @app.get("/portfolio")
 def read_portfolio() -> dict[str, Any]:
     """The build cards the page opens on - one per week, from the pack's own AGENTS.md, so a
     visitor with no time can scroll what was built - plus the two eval gates' pass rates.
     Text parsing only: free, no model call."""
     try:
-        return {**portfolio.get_portfolio(), "gates": portfolio.gates()}
+        return {**portfolio.get_portfolio(), "gates": portfolio.gates(),
+                "profile": portfolio.profile()}
     except ContextPackError as exc:
         raise HTTPException(status_code=503, detail=f"context pack not loaded: {exc}")
 

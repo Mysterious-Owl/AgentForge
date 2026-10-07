@@ -16,16 +16,17 @@ client = TestClient(app)
 # FastAPI adds these on its own; they are not part of the surface the diagram claims.
 DOC_ROUTES = {"/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
 SURFACE = {
-    ("GET", "/"), ("GET", "/health"), ("GET", "/readme"), ("GET", "/portfolio"),
+    ("GET", "/"), ("GET", "/admin"), ("GET", "/health"), ("GET", "/readme"), ("GET", "/portfolio"),
     ("GET", "/portfolio/{week}"),
     ("GET", "/.well-known/agent-card.json"), ("GET", "/.well-known/agent.json"),
+    ("GET", "/.well-known/jwks.json"),
     ("POST", "/a2a"), ("POST", "/ask"), ("GET", "/actions"),
     ("POST", "/approve"), ("GET", "/audit/{user_id:path}"),
     ("POST", "/memory"), ("GET", "/memory"), ("DELETE", "/memory"),
 }
 
 
-def test_route_surface_is_exactly_the_fifteen_routes():
+def test_route_surface_is_exactly_the_seventeen_routes():
     routes = {(m, r.path) for r in app.routes if r.path not in DOC_ROUTES
               for m in getattr(r, "methods", set()) - {"HEAD"}}
     assert routes == SURFACE
@@ -203,10 +204,10 @@ def test_phones_and_cards_are_redacted_under_their_own_labels():
 
 # ---------- the UI: one brand, and no server value inside an inline handler ----------
 
-def test_ui_uses_the_course_brand_and_no_inline_handler_ids():
+def test_ui_credits_the_course_under_the_student_and_has_no_inline_handler_ids():
     page = client.get("/").text
-    assert "<title>Applied GenAI &amp; Agentic AI Engineering Course Week 17" in page or \
-           "<title>Applied GenAI & Agentic AI Engineering Course Week 17" in page
+    assert "<title>AgentForge - PortfolioAgent</title>" in page   # the profile's name replaces it
+    assert "Applied GenAI &amp; Agentic AI Engineering Course" in page   # credited, underneath
     assert "CoreSmart AI" not in page
     assert "decideAction('${" not in page
 

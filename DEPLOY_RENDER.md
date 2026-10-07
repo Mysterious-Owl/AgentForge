@@ -101,14 +101,19 @@ Open your service URL, then:
 token. To get it:
 
 1. Open the service's **Environment** tab and copy `ADMIN_TOKEN`.
-2. In the browser UI, paste it into the **Owner** field (it appears on a deployment that needs
-   it). It is kept in that tab only and sent as a bearer token.
+2. Open `https://<your-service>.onrender.com/admin` and paste it into the **Admin token**
+   field. It is kept in that tab only and sent as a bearer token.
 3. From curl or another client, send `Authorization: Bearer <token>`.
 
 When a visitor asks the agent to put them in touch, it calls `request_intro` and the request
-pauses at the gate; open **📥 Intro requests** with the token to approve or reject it. Without
-the token, the inbox, approve and the audit log answer "owner only" - honestly, not with an
-error.
+pauses at the gate; on `/admin`, **Refresh inbox** to approve or reject it. Without the token,
+the inbox, approve and the audit log answer "owner only" - honestly, not with an error.
+
+The card is signed with a key derived from `CARD_SIGNING_SEED`, which the Blueprint generates.
+Check it: **Fetch Agent Card** on your page should say **✓ signature verified**, and
+`/.well-known/jwks.json` should list one key. If you created the service before this setting
+existed, add `CARD_SIGNING_SEED` (any long random string) in **Environment** - or sync the
+Blueprint - and redeploy.
 
 ### 7. Share the link
 Put the URL on your resume and LinkedIn. Every `git push` to `main` redeploys it.

@@ -7,14 +7,16 @@ the tools by function calling, every fact in an answer cites the source a tool r
 page shows the trace (`Called get_build(4) → get_eval_results(4)`). It publishes an **Agent
 Card** at a well-known URL, answers other agents over **A2A 1.0 JSON-RPC**, and deploys as a
 single shareable link, so when a hiring manager asks "tell me about your AgentForge," they can
-scroll your builds, ask the agent, or call it from their own agent.
+scroll your builds, ask the agent, or call it from their own agent - and check, from the card's
+signature, that the agent they reached is yours. Your name, headline and links head the page.
 
-> **UI routes:** `GET /` (browser UI), `GET /health` (both model tiers, both caps,
-> the price table), `GET /readme` (this file, dark-rendered), `GET /portfolio` (the build
-> cards the page opens on, plus both eval gates' pass rates), `GET /portfolio/{week}` (one
-> build's read page). **A2A 1.0:** `GET /.well-known/agent-card.json` (discovery; legacy alias
-> `agent.json`) and `POST /a2a` (JSON-RPC `SendMessage`). Every response carries an
-> `A2A-Version: 1.0` header.
+> **UI routes:** `GET /` (browser UI), `GET /admin` (the owner's page: token, intro inbox,
+> audit log), `GET /health` (both model tiers, both caps, the price table), `GET /readme` (this
+> file, dark-rendered), `GET /portfolio` (the build cards the page opens on, the profile, both
+> eval gates' pass rates), `GET /portfolio/{week}` (one build's read page). **A2A 1.0:**
+> `GET /.well-known/agent-card.json` (discovery, signed; legacy alias `agent.json`),
+> `GET /.well-known/jwks.json` (the key that verifies it) and `POST /a2a` (JSON-RPC
+> `SendMessage`). Every response carries an `A2A-Version: 1.0` header.
 
 ### The four-layer spine (each is real, running code)
 
@@ -52,13 +54,15 @@ scroll your builds, ask the agent, or call it from their own agent.
 │   ├── scrub.py         <- PII scrubbing as logging filters (app, uvicorn, access log) + the scrub() function the audit log uses
 │   ├── guard.py         <- public-deploy guards: admin token, per-client rate limit, daily spend budget, body-size limit
 │   ├── a2a.py           <- A2A 1.0 JSON-RPC: SendMessage answers with a Message; every other core method answers with the spec's error
-│   └── main.py          <- FastAPI app: the 15 routes, the middleware (A2A-Version header, CORS, body limit, rate limit), the Agent Card builder
+│   ├── signing.py       <- signs the Agent Card (detached JWS, ES256) and serves the key as a JWK Set; key derived from CARD_SIGNING_SEED
+│   └── main.py          <- FastAPI app: the 17 routes, the middleware (A2A-Version header, CORS, body limit, rate limit), the Agent Card builder
 ├── data/
 │   ├── AGENTS.md                <- the pack: what AgentForge is, its rules, one entry per milestone (Week 1 → Week 17) - the build cards and get_build read it
 │   ├── architecture.md          <- the pack: the spine, the key decisions, the four architecture diagrams as text - get_architecture reads it
 │   ├── eval_results.json        <- the pack: every weekly eval gate + this agent's two gates - get_eval_results reads it
 │   ├── eval_golden.jsonl        <- 27 frozen routing questions (question → expected tier, first-call tokens) - the routing gate's input
 │   ├── eval_tools_golden.jsonl  <- 14 frozen questions → the tool the model should choose and the source it should cite - the tool gate's input
+│   ├── profile.json             <- who built it: name, headline, LinkedIn, GitHub, resume, photo - the page header and About line
 │   ├── weeks/                   <- w01.md … w17.md: each week in depth (what, how, decisions, results, stack) - get_week_details reads them
 │   └── tiktoken/                <- the o200k_base vocabulary, shipped so the cost ceiling never downloads it
 ├── tests/
@@ -70,9 +74,11 @@ scroll your builds, ask the agent, or call it from their own agent.
 │   ├── test_deploy.py       <- A2A JSON-RPC, the public-deploy guards, the uvicorn scrubbers
 │   ├── test_hardening.py    <- the route surface, the client lifecycle, tokenizer counting, concurrency, PII labels, whole-word cues, the UI
 │   ├── test_public_url.py   <- what a stranger on the shared URL can do: size limits, who the rate limit counts, strict A2A versions, an honest audit trail
+│   ├── test_admin_profile.py <- the signed card (verifies; a changed card or another key fails), the /admin page, the profile (http links only)
 │   ├── test_portfolio.py    <- the build cards and read pages: every week of the pack, no package ids, a student's own pack, 404/503, model-free, escaped
 │   └── test_pack.py         <- the pack: the worst-case loop fits the ceiling, golden-set drift, saved results, the tool gate's rows and scorer
-├── index.html           <- browser UI (served at GET /)
+├── index.html           <- browser UI for visitors (served at GET /)
+├── admin.html           <- the owner's page (served at GET /admin): token, intro inbox, audit log
 ├── eval_run.py          <- the routing gate: replays 27 questions offline, prints the routed vs all-frontier bill, exits non-zero on a regression
 ├── eval_tools.py        <- the tool-choice gate: replays 14 questions against the LIVE model (--live; it spends), exits non-zero below 0.80
 ├── week17_notebook.ipynb <- curl + Python-requests walkthrough of the routes, the A2A methods and the failure modes
@@ -277,7 +283,7 @@ as `/ask` and replies with a `Message` whose `metadata` carries the tier, model,
 trace, the verified citations and any pending intro id. One `SendMessage` is one question.
 
 ### `app/main.py` - FastAPI routes
-Thin handlers for the 15 routes in section 4, the middleware and `build_agent_card()`. The body
+Thin handlers for the 17 routes in section 4, the middleware and `build_agent_card()`. The body
 limit and the rate limit sit **inside** CORS and the `A2A-Version` header, so a 413 or a 429
 still carries both. `/ask` maps the guards to status codes: 422 (question or history out of
 bounds), 503 (pack missing), 413 (ceiling), 429 (iteration cap or daily budget), 502 (model call
@@ -305,7 +311,9 @@ called and nothing leaked; for the intro row, the request is paused at the gate.
   rates, then one card per week from `GET /portfolio`. Click a card for the full description,
   then **💬 Ask about this build** (fills the question; nothing is sent until **Ask**) or
   **📖 Read in a new tab** (`GET /portfolio/{week}`).
-- **Header:** **🗂 My builds** (back to the cards), the health chip and **📖 README**.
+- **Header:** the student's name and AgentForge, with the course credit small underneath (from
+  `data/profile.json`), the LinkedIn / GitHub / Résumé links, **🗂 My builds** (back to the
+  cards), **📖 README** and the health chip. The overview card ends with an About line.
 - **Ask:** the question box, example pills (*Week 4 build*, *Week 2 results*, *Why nano?*,
   *Compare W5 vs W6*, *Contact the student*, *Off-topic (test)*, *Oversized input (413)*) and
   **Ask**. The answer card shows the badge (grounded · cited, not grounded, out of scope, or
@@ -316,11 +324,17 @@ called and nothing leaked; for the intro row, the request is paused at the gate.
   not); clicking a citation opens the excerpt it points at. An intro request adds the gate card
   with **✓ Approve** / **✕ Reject**.
 - **History:** "Follow-ups use the last N turns (kept in this tab)" and **✕ New chat**.
-- **A2A:** **🪪 Fetch Agent Card** and **🤝 Ask over A2A** (reads the card, takes the path from
-  `supportedInterfaces`, sends `SendMessage`; shows the `Message`, its trace and the envelope).
-- **Memory + approvals:** **🧾 My audit log** and **📥 Intro requests** (`GET /actions`).
-- **Owner** (only on a deployment that sets `ADMIN_TOKEN` - `/health` says so): the admin token,
-  kept in this tab's `sessionStorage` and sent as a bearer token to the owner-only routes.
+- **A2A:** **🪪 Fetch Agent Card** (shows the card and **verifies its signature in the browser**
+  with WebCrypto: fetches the key its `jku` names, rebuilds the signed bytes, checks ES256) and
+  **🤝 Ask over A2A** (reads the card, takes the path from `supportedInterfaces`, sends
+  `SendMessage`; shows the `Message`, its trace and the envelope).
+- **An intro request** shows as "waiting for the student" - visitors cannot decide it, and a
+  link at the bottom of the panel points the student to `/admin`.
+
+`admin.html` (`/admin`) is the owner's page: the admin token (kept in this tab's
+`sessionStorage`, sent as a bearer token), **📥 Intro requests** (`GET /actions`, with
+**✓ Approve** / **✕ Reject**) and **🧾 Audit log** for any user id. Serving the page is harmless -
+everything it shows comes from `[admin]` routes, which need the token on a deployment.
 
 Every call goes to `const API` at the top of the page script.
 
@@ -340,12 +354,14 @@ required on Render). Locally, with no token set, every route is open.
 
 | Route | Method | What it does |
 |---|---|---|
-| `/` | GET | Browser UI |
+| `/` | GET | Browser UI for visitors |
+| `/admin` | GET | The owner's page: token, intro inbox, audit log (its data needs the token) |
 | `/health` | GET | Both tiers, both caps, the price table |
 | `/readme` | GET | This file, dark-rendered |
 | `/portfolio` | GET | The build cards - one per week - plus both gates' pass rates (no model call) |
 | `/portfolio/{week}` | GET | One build's read page: results, decisions, diagrams (HTML; 404 for an unknown week) |
-| `/.well-known/agent-card.json` (+ `agent.json`) | GET | A2A discovery - the Agent Card |
+| `/.well-known/agent-card.json` (+ `agent.json`) | GET | A2A discovery - the Agent Card, signed when `CARD_SIGNING_SEED` is set |
+| `/.well-known/jwks.json` | GET | The public key (JWK Set) that verifies the card's signature |
 | `/a2a` | POST | A2A 1.0 JSON-RPC - `SendMessage` answers like `/ask` |
 | `/ask` | POST | The agent: routed, tools chosen by the model, every source checked |
 | `/actions` `[admin]` | GET | The student's inbox: intro requests waiting at the gate |
@@ -444,7 +460,12 @@ takes the path from `supportedInterfaces`, and sends `SendMessage`.
 **How this differs from Week 11's AgentMesh, on purpose.** AgentMesh *emits* `A2A-Version`
 and never negotiates, and declares `signature: None`. The PortfolioAgent sits on a public URL
 that strangers' agents call, so it accepts exactly `1.0` and refuses anything else with -32009 -
-a missing header included - and an unsigned card simply carries no `signatures` list.
+a missing header included - and it **signs its card**: `signatures` holds a detached JWS
+(ES256) over the card without that field (keys sorted, no whitespace), with a header naming the
+key (`kid`) and where to fetch it (`jku` = `/.well-known/jwks.json`). Change one character of the
+card - say, point `supportedInterfaces` at another host - and the signature no longer verifies.
+The key is derived from one setting, `CARD_SIGNING_SEED`, which Render generates; without it
+(locally) the card is served unsigned and carries no `signatures` list.
 
 ---
 
@@ -456,8 +477,8 @@ a missing header included - and an unsigned card simply carries no `signatures` 
    `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1`. `.python-version` pins
    Python 3.12.
 3. Render asks once for `OPENAI_API_KEY` - paste it there, never in the repo.
-   `ADMIN_TOKEN` is generated for you; read it in the service's **Environment** tab, then paste
-   it into the page's **Owner** field to see and decide intro requests.
+   `ADMIN_TOKEN` and `CARD_SIGNING_SEED` are generated for you. Read `ADMIN_TOKEN` in the
+   service's **Environment** tab and paste it on `/admin` to see and decide intro requests.
 4. Every `git push` redeploys. The Agent Card advertises your `onrender.com` URL on its own -
    Render sets `RENDER_EXTERNAL_URL`, and `AGENT_BASE_URL` overrides it for a custom domain.
 
@@ -510,7 +531,7 @@ What the free plan means in practice:
 ## 9. Run the tests + the eval gates
 
 ```bash
-pytest -q                     # 199 passed in a few seconds - no GPU, no network, no API key
+pytest -q                     # 211 passed in a few seconds - no GPU, no network, no API key
 python eval_run.py            # the routing gate - offline; non-zero exit on a regression
 python eval_tools.py --live   # the tool-choice gate - calls the real model (~28 calls)
 ```
@@ -536,7 +557,7 @@ tool calls and answers, and everything around the model runs for real. It covers
   execute once; a second decision is a 409 with no audit line; the inbox lists only open
   requests; a stranger without the token gets 401s.
 - **Routing, the routes and the card, A2A and the deploy guards, size limits, memory, PII,
-  the build cards and read pages, the UI** - as before: exactly 15 routes, the A2A 1.0 shapes
+  the build cards and read pages, the UI** - as before: exactly 17 routes, the A2A 1.0 shapes
   and errors, the rate limit's client key, the daily budget across every call, the audit log
   scrubbed (a visitor's contact included).
 - **The pack and the gates:** the worst realistic loop fits the ceiling; the golden set's token
@@ -581,8 +602,10 @@ belongs in it.
   - It proves every cited source was returned in this run; it cannot prove the sentence before
     it says what that source says.
   - Production: an answer-level judge, scored against a golden set - the tool gate is the start.
-- **The Agent Card is unsigned.**
-  - Production: sign the card so a caller can verify it came from you.
+- **The signing key is derived from an environment variable.**
+  - One seed, one key, no key file to manage - right for one deployment.
+  - Production: keep the key in a KMS or secret manager and rotate it on a schedule (the `kid`
+    lets callers follow a rotation).
 - **The classifier reads keywords, not meaning.**
   - Reproducible and free, and it can be wrong on a question phrased without a cue; the
     route-up valve and the routing gate are the guards.
@@ -592,7 +615,9 @@ belongs in it.
   - `/docs` and `/openapi.json` list every route, the owner-only ones included - they still need
     the token.
 - **The admin token is one shared secret.**
-  - Fine for one owner deciding their own intro requests. Production: per-user auth.
+  - One student, one owner: a token from an environment variable, pasted on `/admin`, is enough.
+  - With more than one user, the upgrade is real authentication - OAuth / SSO, e.g. Firebase Auth
+    or your identity provider - not a second token.
 
 ---
 
@@ -615,6 +640,8 @@ belongs in it.
 ## 12. Where this goes next
 
 - **Make it yours.**
+  - Put your name, headline and links in `data/profile.json` (http(s) links only; a photo URL
+    is optional - without one the header shows your initials).
   - Replace the three pack files with your own capstone's (keep the headings in section 5), then
     run `python eval_run.py --refresh-tokens`, `python eval_run.py` and `pytest -q`.
   - Rewrite both golden sets so the gates measure *your* agent's traffic, then run
@@ -628,8 +655,7 @@ belongs in it.
   - Point the small tier at a local model with `SMALL_BASE_URL` and `SMALL_MODEL`, and keep it
     only if it passes the tool-choice gate as nano does.
 - **Grow the A2A surface when the work needs it.**
-  - Sign the Agent Card; add real tasks (`GetTask`, streaming) only when a request becomes
-    long-running.
+  - Add real tasks (`GetTask`, streaming) only when a request becomes long-running.
 
 ---
 

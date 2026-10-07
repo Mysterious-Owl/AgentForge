@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Owner - PortfolioAgent</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#0d1117; --surface:#161b22; --surface-2:#21262d; --surface-3:#2d333b;
+      --border:#30363d; --text:#e6edf3; --text-muted:#7d8590; --blue:#58a6ff;
+      --blue-dim:#1f3a5f; --green:#3fb950; --green-dim:#1a3a28; --red:#f85149;
+      --red-dim:#3d1a1a; --orange:#d29922; --radius:8px;
+      --mono:'Fira Code','Cascadia Code','Consolas',monospace;
+    }
+    body { background:var(--bg); color:var(--text); font-size:14px;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:12px 20px; background:var(--surface); border-bottom:1px solid var(--border); }
+    header h1 { font-size:16px; font-weight:600; }
+    header .sub { color:var(--text-muted); font-size:12px; margin-top:2px; }
+    a { color:var(--blue); text-decoration:none; } a:hover { text-decoration:underline; }
+    main { max-width:960px; margin:0 auto; padding:20px; display:grid; gap:16px; }
+    .panel { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+      padding:16px; }
+    label { display:block; font-size:12px; font-weight:600; text-transform:uppercase;
+      letter-spacing:.05em; color:var(--text-muted); margin-bottom:8px; }
+    input { width:100%; background:var(--surface-2); border:1px solid var(--border);
+      border-radius:var(--radius); color:var(--text); font-size:13px; padding:8px 12px; outline:none; }
+    input:focus { border-color:var(--blue); }
+    .note { color:var(--text-muted); font-size:12px; margin-top:6px; line-height:1.5; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    button { cursor:pointer; border:none; border-radius:var(--radius); font-size:13px; font-weight:500;
+      padding:8px 16px; }
+    .btn-primary { background:#1a56db; color:#fff; } .btn-primary:hover { background:#1d4ed8; }
+    .btn-secondary { background:var(--surface-2); color:var(--text); border:1px solid var(--border); }
+    .btn-secondary:hover { background:var(--surface-3); }
+    .card { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius);
+      padding:12px 14px; margin-top:10px; }
+    .meta { display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:12px;
+      color:var(--text-muted); margin-bottom:8px; }
+    .badge { display:inline-flex; padding:2px 9px; border-radius:20px; font-size:10px; font-weight:700;
+      text-transform:uppercase; letter-spacing:.06em; }
+    .badge-pending { background:#3a2e12; color:var(--orange); border:1px solid #5a4a1a; }
+    .badge-ok { background:var(--green-dim); color:var(--green); border:1px solid #1a4a2e; }
+    .badge-no { background:var(--red-dim); color:var(--red); border:1px solid #6b2020; }
+    .badge-neutral { background:var(--blue-dim); color:var(--blue); border:1px solid #1f4080; }
+    .text { line-height:1.6; white-space:pre-wrap; }
+    .mono { font-family:var(--mono); font-size:12px; white-space:pre-wrap; color:#a5d6ff; }
+    .error { background:var(--red-dim); border:1px solid #6b2020; border-radius:var(--radius);
+      padding:10px 12px; color:var(--red); font-size:13px; margin-top:10px; }
+    .muted { color:var(--text-muted); font-style:italic; margin-top:10px; }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔐 Owner - PortfolioAgent</h1>
+    <div class="sub">Intro requests and audit logs. Visitors never see this page's data.</div>
+  </div>
+  <a href="/">← Public page</a>
+</header>
+<main>
+  <section class="panel">
+    <label for="owner-token">Admin token</label>
+    <input id="owner-token" type="password" autocomplete="off"
+           placeholder="ADMIN_TOKEN from your Render service's Environment tab">
+    <div class="note">Kept in this tab only (sessionStorage) and sent as a bearer token to the owner-only
+      routes. One student, one owner, so a token from an environment variable is enough here; a
+      multi-user deployment would use OAuth / SSO (e.g. Firebase Auth) instead.</div>
+  </section>
+  <section class="panel">
+    <div class="row" style="justify-content:space-between">
+      <label style="margin:0">📥 Intro requests</label>
+      <button class="btn-secondary" id="btn-inbox">Refresh inbox</button>
+    </div>
+    <div id="inbox"><div class="muted">Enter the token, then refresh.</div></div>
+  </section>
+  <section class="panel">
+    <label for="audit-user">🧾 Audit log</label>
+    <div class="row">
+      <input id="audit-user" value="demo-user" style="flex:1" autocomplete="off">
+      <button class="btn-secondary" id="btn-audit">View</button>
+    </div>
+    <div id="audit"></div>
+  </section>
+</main>
+<script>
+  // SHOOT-ONLY - the same swap as index.html: the deployed page calls the server that served it.
+  const API = window.location.origin;
+  // const API = 'http://localhost:8100';   // SHOOT-ONLY
+  const OWNER_KEY = 'portfolioagent-owner-token';
+  const tokenBox = document.getElementById('owner-token');
+  function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+  try { tokenBox.value = sessionStorage.getItem(OWNER_KEY) || ''; } catch(e){}
+  tokenBox.addEventListener('input', () => {
+    try { sessionStorage.setItem(OWNER_KEY, tokenBox.value.trim()); } catch(e){}
+  });
+  function ownerHeaders(){
+    const t = tokenBox.value.trim();
+    return t ? {'Authorization': `Bearer ${t}`} : {};
+  }
+  async function call(path, opts={}){
+    const r = await fetch(`${API}${path}`, {...opts,
+      headers:{'Content-Type':'application/json', ...ownerHeaders(), ...(opts.headers||{})}});
+    const d = await r.json().catch(() => ({}));
+    if(r.status === 401) throw new Error('Owner only - enter this deployment\'s admin token above.');
+    if(r.status === 409) throw new Error(`This request was already ${d.detail && d.detail.status} - a decision is made once.`);
+    if(!r.ok) throw new Error(`${r.status} - ${typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail)}`);
+    return d;
+  }
+  function showError(where, e){
+    document.getElementById(where).innerHTML = `<div class="error">${escHtml(e.message)}</div>`;
+  }
+  function renderAction(a){
+    const map = {'input-required':'badge-pending','executed':'badge-ok','rejected':'badge-no'};
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.innerHTML =
+      `<div class="meta"><span class="badge ${map[a.status]||'badge-neutral'}">${escHtml(a.status)}</span>`+
+      `<span>id <b>${escHtml(a.id)}</b> · ${escHtml(a.reason)}</span></div>`+
+      `<div class="text"><b>${escHtml(a.name)}</b>${a.company?' · '+escHtml(a.company):''} · ${escHtml(a.contact)}\n`+
+      `${escHtml(a.message)}</div>`+
+      (a.result ? `<div class="note">${escHtml(a.result)}</div>` : '')+
+      (a.status === 'input-required'
+        ? `<div class="row" style="margin-top:10px"><button class="btn-primary" data-decide="approve">✓ Approve</button>`+
+          `<button class="btn-secondary" data-decide="reject">✕ Reject</button></div>` : '');
+    // Bound in code: the action id never passes through an HTML attribute.
+    el.querySelectorAll('[data-decide]').forEach(b => b.addEventListener('click', async () => {
+      try {
+        const done = await call('/approve', {method:'POST', body:JSON.stringify(
+          {action_id:a.id, approve:b.dataset.decide === 'approve', approver:'owner'})});
+        el.replaceWith(renderAction(done));
+      } catch(e){ showError('inbox', e); }
+    }));
+    return el;
+  }
+  async function loadInbox(){
+    const box = document.getElementById('inbox');
+    try {
+      const list = await call('/actions');
+      box.innerHTML = list.length ? '' : '<div class="muted">No intro requests waiting.</div>';
+      list.forEach(a => box.appendChild(renderAction(a)));
+    } catch(e){ showError('inbox', e); }
+  }
+  async function loadAudit(){
+    const user = document.getElementById('audit-user').value.trim() || 'demo-user';
+    try {
+      const rows = await call(`/audit/${encodeURIComponent(user)}`);
+      document.getElementById('audit').innerHTML =
+        `<div class="card"><div class="meta"><span class="badge badge-neutral">${escHtml(user)}</span>`+
+        `<span>${rows.length} entr${rows.length===1?'y':'ies'}</span></div>`+
+        `<div class="mono">${escHtml(rows.map(e => `${e.kind}  ·  ${e.detail}`).join('\n') || '(empty)')}</div></div>`;
+    } catch(e){ showError('audit', e); }
+  }
+  document.getElementById('btn-inbox').addEventListener('click', loadInbox);
+  document.getElementById('btn-audit').addEventListener('click', loadAudit);
+  if(tokenBox.value) loadInbox();
+</script>
+</body>
+</html>
