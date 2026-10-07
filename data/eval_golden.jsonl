@@ -20,7 +20,7 @@
 {"id": "q20", "question": "Why is approval a state the system owns and not a user sentence?", "expected_tier": "frontier", "prompt_tokens": 1240, "completion_tokens": 140}
 {"id": "q21", "question": "Evaluate whether the cost ceiling is set at the right level.", "expected_tier": "frontier", "prompt_tokens": 1240, "completion_tokens": 145}
 {"id": "q22", "question": "What are the pros and cons of the deterministic classifier?", "expected_tier": "frontier", "prompt_tokens": 1240, "completion_tokens": 150}
-{"id": "q23", "question": "Describe in full detail every file in the app directory and what each one is responsible for, covering config, schemas, router, tools, memory, budget, llm, scrub and main, one at a time in order.", "expected_tier": "small", "prompt_tokens": 1280, "completion_tokens": 140}
+{"id": "q23", "question": "Describe in full detail every file in the app directory and what each one is responsible for, covering config, schemas, router, tools, memory, budget, llm, scrub and main, one at a time in order.", "expected_tier": "frontier", "prompt_tokens": 1280, "completion_tokens": 140}
 {"id": "q24", "question": "List the reasons the health endpoint returns each field, no analysis needed.", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 130}
 {"id": "q25", "question": "Tell me about your architecture.", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 120}
 {"id": "q26", "question": "What design decisions does AGENTS.md record?", "expected_tier": "small", "prompt_tokens": 1240, "completion_tokens": 120}

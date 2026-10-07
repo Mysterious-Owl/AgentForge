@@ -80,10 +80,10 @@
     "_readme": "Produced by eval_run.py over data/eval_golden.jsonl: 27 frozen questions about the capstone, labelled with the tier a human expects. Prompt tokens are the first call's input (system prompt, tool schemas, question); replace the golden set with your own before you quote these.",
     "suite": "portfolioagent_routing_v1",
     "cases": 27,
-    "passed": 26,
-    "overall_score": 0.963,
+    "passed": 27,
+    "overall_score": 1.0,
     "metrics": {
-      "routing_accuracy": 0.963,
+      "routing_accuracy": 1.0,
       "by_tier": {
         "small": 19,
         "frontier": 8

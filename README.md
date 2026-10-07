@@ -570,7 +570,7 @@ setting your shell may have exported, and points the model at a dead local addre
 call no test meant to make fails instead of spending your key.
 
 `eval_run.py` is the **routing gate**: on the shipped pack the 27 frozen questions route
-19 small / 8 frontier at 0.963 accuracy (26 of 27), and on their first-call tokens the routed
+19 small / 8 frontier at 1.000 accuracy (27 of 27), and on their first-call tokens the routed
 bill is $0.020055 against $0.039622 all-frontier - **1.98x cheaper**. `eval_tools.py --live` is
 the **tool-choice gate**: 14 questions, floor 0.80, written to `eval_results.json` and shown on
 the site. Wire both into CI and a regression fails the build before it reaches a demo.

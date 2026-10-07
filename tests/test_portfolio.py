@@ -116,7 +116,7 @@ def test_read_page_shows_results_decisions_and_tagged_diagram_lines():
 def test_week_17_shows_its_own_routing_gate():
     page = client.get("/portfolio/17").text
     assert "PortfolioAgent routing gate" in page and "27 frozen questions" in page
-    assert "routing accuracy 0.963" in page
+    assert "routing accuracy 1.0" in page
 
 
 def test_a_week_with_nothing_recorded_says_so():
