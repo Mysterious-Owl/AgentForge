@@ -36,6 +36,9 @@ GenerateFn = Callable[[list[dict], str, list[dict], IterationBudget | None], Mod
 
 # [AGENTS.md · W4] - a bracketed tag, not a markdown link "[text](url)".
 _CITATION = re.compile(r"\[([^\[\]\n]{1,80})\](?!\()")
+# Only a tag shaped like a source (a pack file, optionally " · part") is a citation. Brackets
+# quoted from the pack - `[doc#N]`, `[chunk-id]`, `["action_execute"]` - are text, not claims.
+_SOURCE_SHAPE = re.compile(r"[\w./-]+\.(?:md|json)(?: · \S.*)?")
 
 
 class EmptyAnswer(RuntimeError):
@@ -71,6 +74,8 @@ def check_citations(answer: str, sources: list[str]) -> tuple[list[str], list[st
     verified, unverified = [], []
     for raw in _CITATION.findall(answer):
         tag = " ".join(raw.split())
+        if not _SOURCE_SHAPE.fullmatch(tag):
+            continue
         bucket = verified if tag in returned else unverified
         if tag not in bucket:
             bucket.append(tag)

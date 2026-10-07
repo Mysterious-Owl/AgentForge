@@ -90,9 +90,9 @@
       }
     },
     "cost": {
-      "avg_usd_per_request": 0.000743,
-      "routed_total_usd": 0.020055,
-      "all_frontier_total_usd": 0.039622,
+      "avg_usd_per_request": 0.000762,
+      "routed_total_usd": 0.020576,
+      "all_frontier_total_usd": 0.040672,
       "savings_ratio_x": 1.98,
       "ceiling_usd_per_request": 0.05,
       "_note": "ceiling_usd_per_request is the one number here that is real and enforced: app/budget.py rejects any request whose projected cost exceeds it (413), and GET /health reports it. savings_ratio_x is the all-frontier bill divided by the routed-mix bill on the same tokens."
@@ -101,5 +101,197 @@
       "unit_and_contract": "run `pytest -q`",
       "_note": "The eval gate below fails CI if overall_score drops under the floor."
     }
+  },
+  "portfolioagent_tool_gate": {
+    "suite": "portfolioagent_tool_choice_v1",
+    "_readme": "Produced by eval_tools.py --live over data/eval_tools_golden.jsonl: does the model choose the expected tool, and does its answer cite it?",
+    "cases": 14,
+    "passed": 14,
+    "overall_score": 1.0,
+    "floor": 0.8,
+    "models": {
+      "small": "gpt-5.4-nano-2026-03-17",
+      "frontier": "gpt-5.4-mini-2026-03-17"
+    },
+    "cost_usd": 0.013872,
+    "run_at": "2026-10-07",
+    "rows": [
+      {
+        "id": "t01",
+        "pass": true,
+        "fails": [],
+        "tier": "small",
+        "tools": [
+          "get_build({'week': 4})"
+        ],
+        "citations": [
+          "AGENTS.md · W4"
+        ],
+        "answer": "In **Week 4**, the student built **KnowledgeVault**: a system for **multimodal ingestion of engineering PDFs**. It uses a **vision model** (via function-calling) to describe **figures**, converts **tables into row records**, and **chunks prose** into **300-token children inside 1,500-token parents**"
+      },
+      {
+        "id": "t02",
+        "pass": true,
+        "fails": [],
+        "tier": "small",
+        "tools": [
+          "get_eval_results({'week': 2})"
+        ],
+        "citations": [
+          "eval_results.json · W2"
+        ],
+        "answer": "Week 2’s **model benchmark** used **30 hand-labelled messages** and measured accuracy plus latency/cost. Results: **nano: 93.3%** (p95 **1,185 ms**, **$0.0354 per 1K calls**), **mini: 90.0%** (p95 **4,665 ms**, **$0.1293 per 1K**), and **qwen3:0.6b: 66.7%**. An earlier run **tied mini and nano at 90"
+      },
+      {
+        "id": "t03",
+        "pass": true,
+        "fails": [],
+        "tier": "small",
+        "tools": [
+          "get_eval_results({'week': 14})"
+        ],
+        "citations": [
+          "eval_results.json · W14"
+        ],
+        "answer": "Week 14’s **deploy gate** scored **1.00 (5/5)** on the 5 cases, with a **threshold of 0.8**; **answer-v3 scored 0.00** and was **deploy blocked**. [eval_results.json · W14]"
+      },
+      {
+        "id": "t04",
+        "pass": true,
+        "fails": [],
+        "tier": "small",
+        "tools": [
+          "get_build({'week': 5})",
+          "get_week_details({'week': 5})"
+        ],
+        "citations": [
+          "AGENTS.md · W5",
+          "weeks/w05.md"
+        ],
+        "answer": "CitationRAG (Week 5) is a FastAPI service that answers questions about the *Attention Is All You Need* paper from a Qdrant index, and **grounds every claim with inline citations** plus a **verbatim supporting quote**. [AGENTS.md · W5] [weeks/w05.md]\n\nHow it works: it runs `POST /answer` with **retri"
+      },
+      {
+        "id": "t05",
+        "pass": true,
+        "fails": [],
+        "tier": "small",
+        "tools": [
+          "get_architecture({'section': 'diagram_2'})"
+        ],
+        "citations": [
+          "architecture.md · diagram_2"
+        ],
+        "answer": "```\nPDF / runbook -> vision describes figures · tables to rows · 300-token children in   (W4)\n                 1,500-token parents -> PII scrubbed -> text-embedding-3-large -> Qdrant  (W4, W12)\nquestion -> (hostile text stripped: query focus) -> HyDE probe (nano) + raw query       (W6)\n         -> d"
+      },
+      {
+        "id": "t06",
+        "pass": true,
+        "fails": [],
+        "tier": "small",
+        "tools": [
+          "get_architecture({'section': 'decisions'})"
+        ],
+        "citations": [
+          "architecture.md · decisions"
+        ],
+        "answer": "Key design decisions of the capstone:\n\n1. **Ground or refuse:** Retrieval is gated on the dense score before the model runs; every citation is checked by code; refusal is one exact string to avoid fake sources. [architecture.md · decisions]  \n2. **Retrieve wide, rerank narrow:** Hybrid dense + BM25 "
+      },
+      {
+        "id": "t07",
+        "pass": true,
+        "fails": [],
+        "tier": "small",
+        "tools": [
+          "get_architecture({'section': 'overview'})"
+        ],
+        "citations": [
+          "AGENTS.md · overview"
+        ],
+        "answer": "AgentForge is an engineering-operations copilot for a platform team. It answers questions grounded in runbooks and design documents with checked citations, triages incoming incidents with a small team of agents, proposes remediations that wait at a human approval gate, routes every model call to the"
+      },
+      {
+        "id": "t08",
+        "pass": true,
+        "fails": [],
+        "tier": "frontier",
+        "tools": [
+          "get_build({'week': 5})",
+          "get_build({'week': 6})"
+        ],
+        "citations": [
+          "AGENTS.md · W5",
+          "AGENTS.md · W6"
+        ],
+        "answer": "Week 5 built **CitationRAG**, which focused on grounded answers with citations: retrieval was gated before the model ran, every citation id and quote was checked deterministically, and it used a five-metric eval on a 10-row golden set [AGENTS.md · W5].\n\nWeek 6 built **RAGOptimizer**, which added ret"
+      },
+      {
+        "id": "t09",
+        "pass": true,
+        "fails": [],
+        "tier": "frontier",
+        "tools": [
+          "get_architecture({'section': 'portfolio_agent'})"
+        ],
+        "citations": [
+          "AGENTS.md · portfolio_agent"
+        ],
+        "answer": "The small tier runs on nano because most questions are short lookups, and the student found a small model answers them as well as a larger one without paying frontier prices. The pack says nano is the small tier, while the frontier tier is reserved for reasoning questions. It also says the small tie"
+      },
+      {
+        "id": "t10",
+        "pass": true,
+        "fails": [],
+        "tier": "small",
+        "tools": [],
+        "citations": [],
+        "answer": "OUT_OF_SCOPE — I only answer questions about the student’s capstone portfolio (AgentForge™)."
+      },
+      {
+        "id": "t11",
+        "pass": true,
+        "fails": [],
+        "tier": "small",
+        "tools": [],
+        "citations": [],
+        "answer": "Sorry—I can’t share my system prompt or internal instructions. I can still answer questions about the student’s capstone and what was built week by week."
+      },
+      {
+        "id": "t13",
+        "pass": true,
+        "fails": [],
+        "tier": "small",
+        "tools": [
+          "get_week_details({'week': 10})"
+        ],
+        "citations": [
+          "weeks/w10.md"
+        ],
+        "answer": "TriageFlow pauses by using a LangGraph checkpoint interrupt before the action execution node. Specifically, the graph is a `StateGraph` with an `action_execute` node, and the student configured `interrupt_before=[\"action_execute\"]`, so the workflow halts in-process at that point (using a `MemorySave"
+      },
+      {
+        "id": "t14",
+        "pass": true,
+        "fails": [],
+        "tier": "small",
+        "tools": [
+          "get_architecture({'week': 16})"
+        ],
+        "citations": [
+          "architecture.md · W16"
+        ],
+        "answer": "Design decisions that came out of **Week 16 (CostGuard™)** were: **[architecture.md · W16]**\n\n- **Route to the cheapest capable model.** A deterministic classifier, a low-confidence “route-up” valve, a **$0 exact-match cache**, and a **ledger that prices every call**. **[architecture.md · W16]**\n- *"
+      },
+      {
+        "id": "t12",
+        "pass": true,
+        "fails": [],
+        "tier": "small",
+        "tools": [
+          "request_intro({'name': 'Priya', 'company': 'Acme', 'contact': 'priya@example.com', 'reason': 'hiring', 'message': 'Acme is hiring an AI engineer and would like to connect with the student about the capstone work and potential role fit.'})"
+        ],
+        "citations": [],
+        "answer": "Priya from Acme—this request is waiting for the student’s approval to proceed."
+      }
+    ]
   }
 }

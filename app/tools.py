@@ -66,8 +66,10 @@ TOOL_SPECS: list[dict] = [
         "eval_results.json (Week 17 includes this agent's own gates).", {"week": _WEEK},
         ["week"]),
     _fn("get_architecture", "The capstone's design. Pass `section` for one named section "
-        "(the overview, the operating rules, this PortfolioAgent, the four-layer spine, the key "
-        "decisions, one of four architecture diagrams, where the numbers come from), or pass "
+        "(the overview, the operating rules, `portfolio_agent` for this agent itself - its model "
+        "tiers and routing, why the small tier runs on nano, the open-model slot, its caps and "
+        "gates - the four-layer spine, the key decisions, one of four architecture diagrams, "
+        "where the numbers come from), or pass "
         "`week` for just that week's part: the decisions that cite it and the diagram lines "
         "tagged with it.",
         {"section": {"type": "string", "enum": list(portfolio.SECTIONS)}, "week": _WEEK}, []),

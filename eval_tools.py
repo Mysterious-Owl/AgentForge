@@ -86,7 +86,7 @@ def run(rows: list[dict], generate) -> dict:
         cost += resp.cost_usd
         results.append({"id": row["id"], "pass": not fails, "fails": fails, "tier": resp.tier,
                         "tools": [f"{s.tool}({s.args})" for s in resp.tools_called],
-                        "citations": resp.citations})
+                        "citations": resp.citations, "answer": resp.answer[:300]})
         print(f"{row['id']} {'PASS' if not fails else 'FAIL'}  {resp.tier:8s} "
               f"{' -> '.join(results[-1]['tools']) or '(no tool)'}  {'; '.join(fails)}")
     n = len(rows)

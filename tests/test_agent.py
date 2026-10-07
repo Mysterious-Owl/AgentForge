@@ -148,6 +148,15 @@ def test_citation_check_splits_verified_from_invented():
     # a markdown link is not a citation
 
 
+def test_brackets_quoted_from_the_pack_are_not_citations():
+    """w05.md says `[doc#N]`, w10.md `interrupt_before=["action_execute"]`: quoting them must
+    not make a grounded answer look invented. A source-shaped fake is still caught."""
+    ok, bad = agent.check_citations(
+        "Each claim carries a [doc#N] tag; it pauses via interrupt_before=[\"action_execute\"] "
+        "and keys on [chunk-id] [weeks/w05.md], not [README.md].", ["weeks/w05.md"])
+    assert ok == ["weeks/w05.md"] and bad == ["README.md"]
+
+
 @pytest.mark.parametrize("week,text,cited,unverified", [
     (4, "It scored 99% [eval_results.json · W4] and ingests PDFs [AGENTS.md · W4].",
      ["AGENTS.md · W4"], ["eval_results.json · W4"]),    # one fake source spoils the answer
