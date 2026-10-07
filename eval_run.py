@@ -19,8 +19,12 @@ change, `--refresh-tokens` re-sizes the golden set's prompt tokens (the tests fl
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
+
+# Offline: no model is called, so no key is needed - settings just require the field.
+os.environ.setdefault("OPENAI_API_KEY", "not-needed-offline")
 
 from app.budget import cost_of
 from app.config import get_settings

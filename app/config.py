@@ -75,11 +75,6 @@ class Settings(BaseSettings):
     # (render.yaml); unset = the card is served unsigned.
     card_signing_seed: str | None = None
 
-    # --- The approval gate (Tool layer) ---
-    # Every mutating tool waits for an explicit human YES before it executes.
-    # Approval is state the system owns, not a sentence the user can assert.
-    approval_required: bool = True
-
     # --- The two caps (app/budget.py enforces BOTH; /health surfaces BOTH) ---
     max_iterations: int = 8            # bounded agent loop - no runaway re-planning
     cost_ceiling_usd: float = 0.05     # per-request projected-cost ceiling, pre-flight

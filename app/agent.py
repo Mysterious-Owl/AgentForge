@@ -26,9 +26,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable
 
-from app import llm, tools
+from app import llm, memory, tools
 from app.budget import IterationBudget, cost_of, guard_cost
-from app.schemas import ModelTurn, PendingAction, ToolStep, Turn
+from app.schemas import AuditEntry, ModelTurn, PendingAction, ToolEnvelope, ToolStep, Turn
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,9 @@ GenerateFn = Callable[[list[dict], str, list[dict], IterationBudget | None], Mod
 
 # [AGENTS.md · W4] - a bracketed tag, not a markdown link "[text](url)".
 _CITATION = re.compile(r"\[([^\[\]\n]{1,80})\](?!\()")
+# What a visitor sees when the model ends with no text (a refusal, or the budget ran out).
+EMPTY_ANSWER = "I could not put an answer together for that - please try rephrasing."
+_ONE_INTRO = "one intro request per question - it is already waiting for the student"
 
 
 @dataclass
@@ -91,15 +94,20 @@ def run(question: str, history: list[Turn], pack: dict, model: str, frontier_mod
         out.baseline_usd = round(out.baseline_usd + cost_of(
             turn.prompt_tokens, turn.completion_tokens, frontier_model), 6)
         if not turn.tool_calls:
-            out.answer = turn.text
+            out.answer = turn.text.strip() or EMPTY_ANSWER
             break
         messages.append(llm.assistant_tool_message(turn))
         for call in turn.tool_calls:
             try:
                 args = json.loads(call.arguments or "{}")
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, RecursionError):
                 args = None
-            env = tools.execute_tool(call.name, args, user_id, session_id)
+            if call.name == "request_intro" and out.pending is not None:
+                # One question creates at most one intro - a prompt-injected visitor cannot
+                # fill the student's inbox with one request.
+                env = ToolEnvelope(success=False, tool=call.name, error=_ONE_INTRO)
+            else:
+                env = tools.execute_tool(call.name, args, user_id, session_id)
             if args is None:
                 env = env.model_copy(update={"error": "arguments were not valid JSON"})
             out.steps.append(ToolStep(tool=call.name, args=args if isinstance(args, dict) else {},
@@ -109,6 +117,11 @@ def run(question: str, history: list[Turn], pack: dict, model: str, frontier_mod
                 out.sources.append(env.source)
             if env.success and call.name == "request_intro":
                 out.pending = tools.get_action(env.data["action_id"])
+                # Audited the moment it exists - even if a later cap stops this request.
+                memory.log_audit(AuditEntry(
+                    user_id=user_id, session_id=session_id, kind="intro:proposed",
+                    detail=f"{out.pending.id} from {out.pending.name} ({out.pending.reason}) - "
+                           f"{out.pending.contact}"))
             messages.append(llm.tool_result_message(call.id, env.model_dump_json()))
     out.citations, out.unverified = check_citations(out.answer, out.sources)
     logger.info("agent done: %s call(s), tools=%s, citations=%s, unverified=%s",

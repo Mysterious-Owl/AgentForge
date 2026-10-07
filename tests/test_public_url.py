@@ -105,10 +105,12 @@ def test_rate_limit_prefers_the_edge_set_client_ip_headers(monkeypatch):
 
     def post(**headers):
         return client.post("/a2a", json=CHEAP, headers=headers).status_code
-    # Cloudflare (in front of Render) sets True-Client-IP / CF-Connecting-IP itself.
-    assert post(**{"True-Client-IP": "1.1.1.1", "X-Forwarded-For": "9.9.9.9, 10.0.0.1"}) == 200
-    assert post(**{"True-Client-IP": "1.1.1.1", "X-Forwarded-For": "8.8.8.8, 10.0.0.2"}) == 429
+    # Cloudflare (in front of Render) sets CF-Connecting-IP itself, overwriting the client's.
+    assert post(**{"CF-Connecting-IP": "1.1.1.1", "X-Forwarded-For": "9.9.9.9, 10.0.0.1"}) == 200
+    assert post(**{"CF-Connecting-IP": "1.1.1.1", "X-Forwarded-For": "8.8.8.8, 10.0.0.2"}) == 429
     assert post(**{"CF-Connecting-IP": "2.2.2.2", "X-Forwarded-For": "1.1.1.1, 10.0.0.1"}) == 200
+    # True-Client-IP is set only on Cloudflare Enterprise - elsewhere a client writes it
+    assert post(**{"True-Client-IP": "3.3.3.3", "X-Forwarded-For": "1.1.1.1, 10.0.0.1"}) == 429
 
 
 def test_rate_limit_falls_back_to_the_first_forwarded_hop(monkeypatch):
@@ -178,7 +180,7 @@ def test_a_decided_action_cannot_be_decided_again(monkeypatch):
     assert again.status_code == 409
     assert again.json()["detail"] == {"error": "already_decided", "status": "rejected"}
     kinds = [e["kind"] for e in client.get("/audit/u1").json()]
-    assert kinds == ["ask", "intro:proposed", "intro:rejected"]       # no phantom decision
+    assert kinds == ["intro:proposed", "ask", "intro:rejected"]       # no phantom decision
     assert tools.get_action(a["id"]).status == "rejected"
 
 

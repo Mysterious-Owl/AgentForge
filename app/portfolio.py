@@ -111,6 +111,8 @@ def profile() -> dict:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ContextPackError(f"profile.json is not valid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ContextPackError("profile.json must be a JSON object")
     out = {}
     for key in _PROFILE_TEXT:
         if isinstance(data.get(key), str) and data[key].strip():

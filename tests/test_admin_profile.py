@@ -51,7 +51,9 @@ def test_a_changed_card_or_another_key_fails_verification(monkeypatch):
                                                 "protocolVersion": "1.0"}]}
     assert not signing.verify_card(tampered, keys)          # a redirected interface is caught
     _settings(monkeypatch, CARD_SIGNING_SEED="someone-else")
-    assert not signing.verify_card(card, client.get("/.well-known/jwks.json").json())
+    foreign = client.get("/.well-known/jwks.json").json()["keys"][0]
+    same_kid = {"keys": [{**foreign, "kid": keys["keys"][0]["kid"]}]}   # right kid, wrong key
+    assert not signing.verify_card(card, same_kid)                      # the maths says no
     assert not signing.verify_card({k: v for k, v in card.items() if k != "signatures"}, keys)
 
 
@@ -89,9 +91,11 @@ def test_the_admin_page_is_harmless_without_the_token(monkeypatch):
 # ---------- the student's profile ----------
 
 def test_the_profile_is_served_with_the_build_cards():
+    shipped = json.loads((ROOT / "data" / "profile.json").read_text(encoding="utf-8"))
     profile = client.get("/portfolio").json()["profile"]
-    assert profile["name"] == "Your Name" and profile["github"].startswith("https://")
-    assert "photo" not in profile                            # empty in the template: dropped
+    assert profile["name"] == shipped["name"]                 # whatever the student wrote
+    assert all(v.startswith(("https://", "http://")) for k, v in profile.items()
+               if k in ("linkedin", "github", "resume", "photo"))
 
 
 def _pack_with_profile(tmp_path, monkeypatch, text):

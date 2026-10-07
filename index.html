@@ -278,8 +278,9 @@
   function saveHistory(h){ try { sessionStorage.setItem(HISTORY_KEY, JSON.stringify(h)); } catch(e){} }
   let HISTORY = loadHistory();
   function rememberTurn(question, answer){
-    HISTORY = [...HISTORY, {question: question.slice(0, HISTORY_CHARS),
-                            answer: answer.slice(0, HISTORY_CHARS)}].slice(-HISTORY_TURNS);
+    // Cut by characters (code points), never through the middle of an emoji.
+    const cut = t => Array.from(t).slice(0, HISTORY_CHARS).join('');
+    HISTORY = [...HISTORY, {question: cut(question), answer: cut(answer)}].slice(-HISTORY_TURNS);
     saveHistory(HISTORY); showHistory();
   }
   function showHistory(){
@@ -330,8 +331,10 @@
     div.innerHTML=`<span class="log-ts">${now}</span><span class="log-level">${level.toUpperCase()}</span><span class="log-msg">${escHtml(msg)}</span>`;
     body.appendChild(div); body.scrollTop=body.scrollHeight;
   }
-  function setLoading(a){ document.querySelectorAll('.action-btns button').forEach(b=>b.disabled=a);
-    document.querySelectorAll('.spinner').forEach(s=>s.classList.toggle('active',a)); }
+  let BUSY = 0;   // requests in flight - Ask re-enables only when all of them are done
+  function setLoading(a){ BUSY = Math.max(0, BUSY + (a ? 1 : -1)); const busy = BUSY > 0;
+    document.querySelectorAll('.action-btns button').forEach(b=>b.disabled=busy);
+    document.querySelectorAll('.spinner').forEach(s=>s.classList.toggle('active',busy)); }
   async function doAsk(){
     const q=document.getElementById('question').value.trim();
     if(!q){ addLog('warn','Question is empty.'); return; }
@@ -340,7 +343,7 @@
     try {
       const r=await fetch(`${API}/ask`,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({question:q, history:HISTORY, user_id:DEMO_USER, session_id:'web'})});
-      const d=await r.json();
+      const d=await r.json().catch(()=>({}));
       if(!r.ok){ throw new Error(`${r.status} - ${formatDetail(d.detail, r.statusText)}`); }
       renderAnswer(d);
       if(d.answer) rememberTurn(q, d.answer);
@@ -436,13 +439,13 @@
       ? '<span class="badge badge-pending">⏸ awaiting the student</span>'
       : d.grounded
       ? '<span class="badge badge-grounded">✓ grounded · cited</span>'
-      : /^OUT_OF_SCOPE/.test(d.answer||'')
+      : /^\s*OUT_OF_SCOPE/.test(d.answer||'')
       ? '<span class="badge badge-ungrounded">✕ out of scope</span>'
       : '<span class="badge badge-ungrounded">✕ not grounded</span>';
     // The badge already conveys out-of-scope - don't show the raw sentinel token.
     // The model may return the bare sentinel with no follow-up sentence; never render an
     // empty card - fall back to the refusal the system prompt asks for.
-    const text = d.answer.replace(/^OUT_OF_SCOPE\s*/, '').trim()
+    const text = d.answer.replace(/^\s*OUT_OF_SCOPE\s*/, '').trim()
       || 'I can only answer questions about this capstone.';
     document.getElementById('output-body').innerHTML = `
       <div class="answer-card">
@@ -463,7 +466,9 @@
   async function fetchCard(){
     setLoading(true); addLog('info','GET /.well-known/agent-card.json');
     try {
-      const r=await fetch(`${API}/.well-known/agent-card.json`); const d=await r.json();
+      const r=await fetch(`${API}/.well-known/agent-card.json`);
+      if(!r.ok) throw new Error(`${r.status} - could not fetch the Agent Card`);
+      const d=await r.json();
       const v = await verifyCard(d);
       const sig = v.ok === true ? '<span class="badge badge-grounded">✓ signature verified</span>'
         : v.ok === false ? `<span class="badge badge-ungrounded">✕ ${escHtml(v.why)}</span>`
@@ -507,7 +512,8 @@
                                             unb64url(sigs[0].signature), data);
       return ok ? {ok:true, kid:header.kid} : {ok:false, why:'signature does not match', kid:header.kid};
     } catch(e){
-      return {ok:null, why:'could not verify here'};
+      if(e && e.name === 'NotSupportedError') return {ok:null, why:'this browser cannot verify ES256'};
+      return {ok:false, why:'signature could not be verified'};
     }
   }
   // What another agent would do: read the card, find the interface, send JSON-RPC SendMessage.
@@ -522,15 +528,16 @@
         headers:{'Content-Type':'application/json','A2A-Version':'1.0'},
         body:JSON.stringify({jsonrpc:'2.0', id:1, method:'SendMessage', params:{message:{
           messageId:'ui-'+Date.now(), role:'ROLE_USER', parts:[{text:q}]}}})});
-      const d = await r.json();
+      const d = await r.json().catch(()=>({}));
       if(d.error) throw new Error(`JSON-RPC ${d.error.code} - ${d.error.message}`);
+      if(!r.ok || !d.result) throw new Error(`${r.status} - ${formatDetail(d.detail, r.statusText)}`);
       const m = d.result.message, md = m.metadata || {};
       document.getElementById('output-body').innerHTML =
         `<div class="answer-card"><div class="answer-meta" style="margin:0 0 10px;padding:0;border:none">`+
         `<span class="badge badge-grounded">A2A · ${escHtml(m.role)}</span>`+
         `<span class="kv">tier: <b>${escHtml(md.tier)}</b></span>`+
         `<span class="kv">💵 $${(md.costUsd??0).toFixed(6)}</span></div>`+
-        `<div class="answer-text">${fmtAnswer(m.parts[0].text)}</div>`+
+        `<div class="answer-text">${fmtAnswer(m.parts[0].text.replace(/^\s*OUT_OF_SCOPE\s*/, ''))}</div>`+
         `<div class="trace">🛠 ${escHtml(traceText(md.toolsCalled)||'No tool called')}</div>`+
         `<div class="card-json" style="margin-top:10px">${escHtml(JSON.stringify(d,null,2))}</div></div>`;
       addLog('success',`A2A reply - ${m.role} · ${md.tier} tier · $${(md.costUsd??0).toFixed(6)}`);
@@ -541,7 +548,7 @@
   async function showBuilds(){
     addLog('info','GET /portfolio');
     try {
-      if(!BUILDS){ const r = await fetch(`${API}/portfolio`); const d = await r.json();
+      if(!BUILDS){ const r = await fetch(`${API}/portfolio`); const d = await r.json().catch(()=>({}));
         if(!r.ok) throw new Error(`${r.status} - ${formatDetail(d.detail, r.statusText)}`);
         BUILDS = d; renderProfile(d.profile); }
       renderBuilds(BUILDS);

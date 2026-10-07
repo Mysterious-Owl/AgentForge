@@ -21,7 +21,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Field caps - a public URL takes text from strangers, and every string here is kept in
 # memory (the pending actions, the audit log). The question has no cap of its own: the
@@ -68,6 +68,12 @@ class Classification(BaseModel):
 
 # ---------- ask / answer ----------
 
+def _no_lone_surrogates(v):
+    """Half an emoji (a lone UTF-16 surrogate, e.g. from text cut mid-character) is valid JSON
+    but cannot be encoded for the provider - it would fail every later call. Replace it."""
+    return v.encode("utf-8", "replace").decode("utf-8") if isinstance(v, str) else v
+
+
 class Turn(BaseModel):
     """One earlier exchange, sent back by the browser so a follow-up ("why did you choose
     that?") has something to refer to. The server stores none of it."""
@@ -76,6 +82,11 @@ class Turn(BaseModel):
 
     question: str = Field(..., min_length=1, max_length=HISTORY_TEXT_MAX)
     answer: str = Field(..., min_length=1, max_length=HISTORY_TEXT_MAX)
+
+    @field_validator("question", "answer", mode="before")
+    @classmethod
+    def _whole_characters(cls, v):
+        return _no_lone_surrogates(v)
 
 
 class AskRequest(BaseModel):
@@ -92,6 +103,11 @@ class AskRequest(BaseModel):
     # and any remembered state are keyed per-user and per-session, never shared across users.
     user_id: str = Field("anon", max_length=ID_MAX)
     session_id: str = Field("default", max_length=ID_MAX)
+
+    @field_validator("question", mode="before")
+    @classmethod
+    def _whole_characters(cls, v):
+        return _no_lone_surrogates(v)
 
 
 class ToolStep(BaseModel):
@@ -273,6 +289,6 @@ class AgentCard(BaseModel):
     skills: list[AgentSkill] = Field(default_factory=list)
 
     # A2A 1.0 lets a publisher sign the card with JWS so a client can verify who published it.
-    # THIS BUILD DOES NOT SIGN CARDS: the field is declared so the shape is known, and it is
-    # left out of the JSON. Declaring it is not claiming it.
+    # app/signing.py fills it when CARD_SIGNING_SEED is set; without a seed it stays None and
+    # is left out of the JSON - an unsigned card claims no signature.
     signatures: list[AgentCardSignature] | None = None

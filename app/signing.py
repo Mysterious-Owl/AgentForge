@@ -121,5 +121,5 @@ def verify_card(card: dict[str, Any], key_set: dict[str, Any]) -> bool:
         public.verify(der, f"{sig['protected']}.{b64url(canonical(payload))}".encode(),
                       ec.ECDSA(hashes.SHA256()))
         return True
-    except (StopIteration, KeyError, ValueError, InvalidSignature):
+    except (StopIteration, KeyError, ValueError, TypeError, AttributeError, InvalidSignature):
         return False

@@ -127,12 +127,19 @@
         ? `<div class="row" style="margin-top:10px"><button class="btn-primary" data-decide="approve">✓ Approve</button>`+
           `<button class="btn-secondary" data-decide="reject">✕ Reject</button></div>` : '');
     // Bound in code: the action id never passes through an HTML attribute.
-    el.querySelectorAll('[data-decide]').forEach(b => b.addEventListener('click', async () => {
+    const buttons = el.querySelectorAll('[data-decide]');
+    buttons.forEach(b => b.addEventListener('click', async () => {
+      buttons.forEach(x => x.disabled = true);          // one decision per click
       try {
         const done = await call('/approve', {method:'POST', body:JSON.stringify(
           {action_id:a.id, approve:b.dataset.decide === 'approve', approver:'owner'})});
         el.replaceWith(renderAction(done));
-      } catch(e){ showError('inbox', e); }
+      } catch(e){
+        buttons.forEach(x => x.disabled = false);
+        const err = document.createElement('div');
+        err.className = 'error'; err.textContent = e.message;
+        el.appendChild(err);                            // on this card - the inbox stays
+      }
     }));
     return el;
   }
@@ -146,6 +153,7 @@
   }
   async function loadAudit(){
     const user = document.getElementById('audit-user').value.trim() || 'demo-user';
+    if(user === '.' || user === '..'){ showError('audit', new Error('Not a user id.')); return; }
     try {
       const rows = await call(`/audit/${encodeURIComponent(user)}`);
       document.getElementById('audit').innerHTML =

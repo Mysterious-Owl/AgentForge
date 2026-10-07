@@ -126,7 +126,7 @@ Put the URL on your resume and LinkedIn. Every `git push` to `main` redeploys it
 |---|---|---|
 | `DAILY_BUDGET_USD` | `1.00` | Model spend per UTC day, across every visitor. Then `/ask` and A2A return 429. |
 | `RATE_LIMIT_PER_MINUTE` | `30` | POSTs per client per minute. Then 429 with `Retry-After`. |
-| `TRUST_FORWARDED_FOR` | `true` | Keys the rate limit on the client IP behind Render's proxy: `True-Client-IP` / `CF-Connecting-IP` if present, else the first `X-Forwarded-For` hop. |
+| `TRUST_FORWARDED_FOR` | `true` | Keys the rate limit on the client IP behind Render's proxy: `CF-Connecting-IP` if present, else the first `X-Forwarded-For` hop. |
 | `AGENT_BASE_URL` | *(unset)* | Set it only for a custom domain (no trailing `/` needed); otherwise the card uses `RENDER_EXTERNAL_URL`. Don't paste `.env.example` into **Environment** - a localhost value there would override your Render URL. |
 
 Changing a variable restarts the service.

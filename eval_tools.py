@@ -73,8 +73,14 @@ def run(rows: list[dict], generate) -> dict:
     from app.router import route
     results, passed, cost = [], 0, 0.0
     for row in rows:
-        resp = route(row["question"], generate=generate, budget=IterationBudget(),
-                     user_id="eval", session_id=row["id"])
+        try:
+            resp = route(row["question"], generate=generate, budget=IterationBudget(),
+                         user_id="eval", session_id=row["id"])
+        except Exception as exc:      # a provider error or a cap: the row fails, the run goes on
+            results.append({"id": row["id"], "pass": False, "fails": [f"error: {exc}"[:200]],
+                            "tier": None, "tools": [], "citations": []})
+            print(f"{row['id']} FAIL  error: {exc}"[:160])
+            continue
         fails = score_row(row, resp)
         passed += not fails
         cost += resp.cost_usd

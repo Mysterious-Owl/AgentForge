@@ -10,8 +10,9 @@ all in-process (one instance, like the rest of the capstone's state):
   2. RATE LIMIT   -> POSTs per client per minute. 429 + Retry-After when exceeded.
   3. DAILY BUDGET -> total model spend per UTC day, across ALL callers. The per-request
                      ceiling (app/budget.py) bounds one call; this bounds the day. The check
-                     runs before a call and the spend is recorded after it, so the day can
-                     overshoot by at most one request - itself capped by the ceiling.
+                     runs before a request and the spend is recorded after each call, so
+                     the day can overshoot by the requests already in flight - each one
+                     capped by the per-request ceiling.
   4. BODY SIZE    -> a request body over `max_body_bytes` is a 413 before it is read, and a
                      body that declares no length is a 411. Render Free has 512 MB of RAM.
 """
@@ -52,7 +53,7 @@ def require_admin(authorization: str | None = Header(default=None)) -> None:
     if not token:
         return                                   # localhost / the shoot / the test suite
     scheme, _, presented = (authorization or "").partition(" ")
-    if scheme.lower() != "bearer" or not hmac.compare_digest(presented, token):
+    if scheme.lower() != "bearer" or not hmac.compare_digest(presented.encode(), token.encode()):
         raise HTTPException(status_code=401, detail="admin token required",
                             headers={"WWW-Authenticate": "Bearer"})
 
@@ -60,8 +61,11 @@ def require_admin(authorization: str | None = Header(default=None)) -> None:
 # ── 2. Rate limit ────────────────────────────────────────────────────────────────
 
 # Set by the CDN edge in front of the app (Cloudflare fronts Render), which overwrites any
-# value the client sent - so these are the client IP as the edge saw it.
-_EDGE_IP_HEADERS = ("true-client-ip", "cf-connecting-ip")
+# value the client sent. True-Client-IP is NOT here: Cloudflare sets it only on Enterprise
+# plans, so elsewhere it is whatever the client typed.
+_EDGE_IP_HEADERS = ("cf-connecting-ip",)
+# Forged IPs must not grow the table forever: past this many clients, the oldest is dropped.
+MAX_TRACKED_CLIENTS = 10_000
 
 
 def client_key(request: Request) -> str:
@@ -70,9 +74,9 @@ def client_key(request: Request) -> str:
     Behind a proxy the socket peer is the proxy, shared by every visitor, so with
     TRUST_FORWARDED_FOR on: an edge-set client-IP header first, else the FIRST
     X-Forwarded-For hop (the proxies append theirs after it - keying on the last hop would
-    give everyone one shared limit). A client can forge the first hop to dodge its own limit,
-    never to use up someone else's; the daily budget still caps what that can cost.
-    Check the headers your own deploy receives before you rely on this.
+    give everyone one shared limit). The first hop is client-written: a client can forge it to
+    dodge its own limit, or to spend another address's bucket; the daily budget still caps what
+    either can cost. Check the headers your own deploy receives before you rely on this.
     """
     if get_settings().trust_forwarded_for:
         for name in _EDGE_IP_HEADERS:
@@ -91,7 +95,12 @@ async def rate_limit(request: Request, call_next):
         return await call_next(request)
     key, now = client_key(request), time.monotonic()
     with _LOCK:
-        hits = _HITS.setdefault(key, deque())
+        hits = _HITS.pop(key, None)                # re-inserted below: newest last
+        if hits is None:
+            hits = deque()
+            while len(_HITS) >= MAX_TRACKED_CLIENTS:
+                del _HITS[next(iter(_HITS))]       # the least recently seen client
+        _HITS[key] = hits
         while hits and now - hits[0] >= 60:
             hits.popleft()
         if len(hits) >= limit:

@@ -89,6 +89,8 @@ def _week(args: dict) -> int:
     week = args.get("week")
     if isinstance(week, bool) or not isinstance(week, int):
         raise ValueError("week must be an integer")
+    if not 1 <= week <= 99:              # no 300-digit week reaches a file name
+        raise ValueError(f"no Week {week} in the build history")
     return week
 
 

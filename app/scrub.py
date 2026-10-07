@@ -15,7 +15,9 @@ import logging
 import re
 
 # Deliberately conservative patterns - catch the common shapes, never touch anything else.
-_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+# Bounded parts (RFC 5321: 64-character local part): an unbounded `+` scanned a long run with
+# no "@" in quadratic time - a 16 KB query string blocked the worker for a third of a second.
+_EMAIL = re.compile(r"[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,24}")
 # An ISO-8601 date or date-time (2026-09-11, 2026-09-11 14:23:05, 2026-09-11T14:23:05Z). A
 # timestamp carries 8-14 digits, so it is protected BEFORE the number patterns run - log lines
 # are full of them, and a timestamp is not PII. A model pin's date is covered the same way.

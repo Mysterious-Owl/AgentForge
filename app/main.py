@@ -15,7 +15,8 @@ UI contract:
 
 The agent, layer by layer:
   POST /ask                     -> the agent: routed to a tier, the MODEL picks the tools
-                                   (get_build / get_eval_results / get_architecture, or the
+                                   (get_build / get_week_details / get_eval_results /
+                                   get_architecture, or the
                                    gated request_intro), the answer cites what they returned
   GET  /actions           [admin] -> Tool: the student's inbox - intro requests at the gate
   POST /approve           [admin] -> Tool: the student's YES/NO that resumes a paused action
@@ -344,14 +345,10 @@ def ask(req: AskRequest) -> AskResponse:
                         for s in resp.tools_called if s.tool != "request_intro")
     memory.log_audit(AuditEntry(       # log_audit scrubs every detail
         user_id=req.user_id, session_id=req.session_id, kind="ask",
-        detail=f"[{resp.tier}] {req.question[:80]}" + (f" | {trace}" if trace else ""),
+        # Scrub BEFORE cutting to 80 characters: a cut email ("jane.doe@ex") no longer looks
+        # like one, and would slip past the scrubber.
+        detail=f"[{resp.tier}] {scrub(req.question)[:80]}" + (f" | {trace}" if trace else ""),
     ))
-    if resp.pending_action is not None:
-        a = resp.pending_action
-        memory.log_audit(AuditEntry(
-            user_id=req.user_id, session_id=req.session_id, kind="intro:proposed",
-            detail=f"{a.id} from {a.name} ({a.reason}) - {a.contact}",
-        ))
     return resp
 
 
@@ -469,7 +466,7 @@ async def a2a_rpc(request: Request) -> dict[str, Any]:
     """
     try:
         payload = await request.json()
-    except ValueError:
+    except (ValueError, RecursionError):            # not JSON, or nested past Python's limit
         return a2a.error_response(None, a2a.RpcError(a2a.PARSE_ERROR, "invalid JSON"))
     return await run_in_threadpool(
         a2a.handle, payload, request.headers.get("A2A-Version"),
